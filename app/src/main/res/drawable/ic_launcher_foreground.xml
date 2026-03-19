@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Antenna mast -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M52,72 L56,72 L56,90 L52,90 Z" />
+
+    <!-- Antenna cross bar -->
+    <path
+        android:fillColor="#4CAF50"
+        android:pathData="M44,60 L64,60 L64,64 L44,64 Z" />
+
+    <!-- Signal arc 1 (inner) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="3"
+        android:pathData="M42,52 A12,12 0 0,1 66,52" />
+
+    <!-- Signal arc 2 (middle) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="3"
+        android:pathData="M36,44 A22,22 0 0,1 72,44" />
+
+    <!-- Signal arc 3 (outer) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4CAF50"
+        android:strokeWidth="3"
+        android:pathData="M30,36 A32,32 0 0,1 78,36" />
+
+    <!-- Palm leaf left -->
+    <path
+        android:fillColor="#388E3C"
+        android:pathData="M54,72 Q38,68 32,80 Q44,74 54,76 Z" />
+
+    <!-- Palm leaf right -->
+    <path
+        android:fillColor="#388E3C"
+        android:pathData="M54,72 Q70,68 76,80 Q64,74 54,76 Z" />
+
+</vector>

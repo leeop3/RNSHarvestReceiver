@@ -37,4 +37,7 @@
     <!-- UI elements -->
     <color name="divider">#1E2E1E</color>
     <color name="rank_badge">#2E7D32</color>
+
+    <!-- Launcher icon -->
+    <color name="ic_launcher_background">#1B2A1B</color>
 </resources>
