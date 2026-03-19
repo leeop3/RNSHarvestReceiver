@@ -23,6 +23,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Generate gradle-wrapper.jar using system Gradle
+        run: |
+          # The runner has system Gradle available. Use it to regenerate the
+          # wrapper jar (which contains GradleWrapperMain) so ./gradlew works.
+          gradle wrapper --gradle-version 8.7 --distribution-type bin
+          echo "Wrapper jar size: $(stat -c%s gradle/wrapper/gradle-wrapper.jar) bytes"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
@@ -51,6 +61,12 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Generate gradle-wrapper.jar using system Gradle
+        run: gradle wrapper --gradle-version 8.7 --distribution-type bin
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -87,10 +103,15 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Generate gradle-wrapper.jar using system Gradle
+        run: gradle wrapper --gradle-version 8.7 --distribution-type bin
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # ── Signed build (when KEYSTORE_BASE64 secret is set) ──────────────────
       - name: Decode keystore
         if: ${{ env.KEYSTORE_BASE64 != '' }}
         env:
@@ -112,7 +133,6 @@ jobs:
             -Pandroid.injected.signing.key.password=$KEY_PASSWORD \
             --no-daemon
 
-      # ── Unsigned build (no keystore secret set) ────────────────────────────
       - name: Build Unsigned Release APK
         if: ${{ env.KEYSTORE_BASE64 == '' }}
         env:
@@ -146,6 +166,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Generate gradle-wrapper.jar using system Gradle
+        run: gradle wrapper --gradle-version 8.7 --distribution-type bin
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
@@ -167,17 +193,10 @@ jobs:
             4. Open the downloaded APK file to install
 
             ### 🔵 Connecting to RNode
-            1. Pair your RNode with the Android device via Bluetooth (Android Settings)
+            1. Pair your RNode with Android device via Bluetooth (Android Settings)
             2. Open the app → tap the **antenna icon** in the toolbar → **Connect RNode**
             3. Select your RNode from the list of paired devices
-            4. The status dot turns **green** when connected
-
-            ### 📡 Receiving data
-            Data flows automatically once connected. Field harvesters send CSV
-            reports via LXMF/RNS — the app stores them and displays them in the
-            two tabs: **Incoming Data** and **Harvester Summary**.
-
-            See [README](README.md) for full documentation.
+            4. Status dot turns **green** when connected
           draft: false
           prerelease: false
         env:
