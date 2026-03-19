@@ -26,15 +26,13 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Generate gradle-wrapper.jar using system Gradle
+      - name: Bootstrap gradle-wrapper.jar
+        # The system gradle generates the wrapper jar so ./gradlew can self-
+        # bootstrap. After this, ./gradlew downloads and uses Gradle 8.7
+        # (from gradle-wrapper.properties) — NOT the system Gradle 9.x.
         run: |
-          # The runner has system Gradle available. Use it to regenerate the
-          # wrapper jar (which contains GradleWrapperMain) so ./gradlew works.
           gradle wrapper --gradle-version 8.7 --distribution-type bin
-          echo "Wrapper jar size: $(stat -c%s gradle/wrapper/gradle-wrapper.jar) bytes"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+          echo "Wrapper jar: $(stat -c%s gradle/wrapper/gradle-wrapper.jar) bytes"
 
       - name: Run unit tests
         run: ./gradlew test --no-daemon --stacktrace
@@ -65,11 +63,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Generate gradle-wrapper.jar using system Gradle
+      - name: Bootstrap gradle-wrapper.jar
         run: gradle wrapper --gradle-version 8.7 --distribution-type bin
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
@@ -106,11 +101,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Generate gradle-wrapper.jar using system Gradle
+      - name: Bootstrap gradle-wrapper.jar
         run: gradle wrapper --gradle-version 8.7 --distribution-type bin
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Decode keystore
         if: ${{ env.KEYSTORE_BASE64 != '' }}
@@ -126,12 +118,11 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
-          ./gradlew assembleRelease \
+          ./gradlew assembleRelease --no-daemon \
             -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/release.keystore \
             -Pandroid.injected.signing.store.password=$STORE_PASSWORD \
             -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-            -Pandroid.injected.signing.key.password=$KEY_PASSWORD \
-            --no-daemon
+            -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
       - name: Build Unsigned Release APK
         if: ${{ env.KEYSTORE_BASE64 == '' }}
@@ -169,11 +160,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Generate gradle-wrapper.jar using system Gradle
+      - name: Bootstrap gradle-wrapper.jar
         run: gradle wrapper --gradle-version 8.7 --distribution-type bin
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon
