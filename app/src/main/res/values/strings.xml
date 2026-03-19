@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RNS Harvest Receiver</string>
+    <string name="tab_incoming">Incoming Data</string>
+    <string name="tab_summary">Harvester Summary</string>
+    <string name="menu_connect">Connect RNode</string>
+    <string name="menu_disconnect">Disconnect</string>
+    <string name="menu_clear_data">Clear All Data</string>
+    <string name="status_not_connected">Not connected to RNode</string>
+    <string name="status_connected">Connected</string>
+    <string name="no_records">No records received yet</string>
+</resources>

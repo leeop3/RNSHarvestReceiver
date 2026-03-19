@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand / Primary -->
+    <color name="color_primary">#1B2A1B</color>
+    <color name="color_primary_dark">#0F1A0F</color>
+    <color name="color_secondary">#2E4D2E</color>
+
+    <!-- Backgrounds -->
+    <color name="bg_primary">#111811</color>
+    <color name="bg_card">#1C261C</color>
+    <color name="header_bg">#162116</color>
+    <color name="header_bg_dark">#0E160E</color>
+    <color name="status_bar_bg">#0A120A</color>
+
+    <!-- Accent Colors -->
+    <color name="accent_green">#4CAF50</color>
+    <color name="accent_green_dark">#388E3C</color>
+    <color name="accent_amber">#FFC107</color>
+    <color name="accent_red">#EF5350</color>
+    <color name="accent_blue">#42A5F5</color>
+
+    <!-- Text -->
+    <color name="text_primary">#E8F5E9</color>
+    <color name="text_secondary">#A5D6A7</color>
+    <color name="text_hint">#558B2F</color>
+    <color name="white">#FFFFFF</color>
+    <color name="white_80">#CCFFFFFF</color>
+    <color name="white_70">#B3FFFFFF</color>
+    <color name="white_60">#99FFFFFF</color>
+
+    <!-- Status indicators -->
+    <color name="status_connected">#4CAF50</color>
+    <color name="status_connecting">#FFC107</color>
+    <color name="status_disconnected">#757575</color>
+    <color name="status_error">#EF5350</color>
+
+    <!-- UI elements -->
+    <color name="divider">#1E2E1E</color>
+    <color name="rank_badge">#2E7D32</color>
+</resources>
