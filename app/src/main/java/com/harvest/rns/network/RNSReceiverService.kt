@@ -256,7 +256,7 @@ class RNSReceiverService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("RNS Harvest Receiver")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_menu_antenna)
+            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(pi)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
