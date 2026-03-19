@@ -24,7 +24,23 @@ android {
         }
     }
 
+    signingConfigs {
+        debug {
+            // Use the standard Android debug keystore so the APK installs
+            // on any device without "package appears to be invalid" errors.
+            // The CI runner generates this keystore automatically.
+            storeFile     file(System.getProperty("user.home") + "/.android/debug.keystore")
+            storePassword "android"
+            keyAlias      "androiddebugkey"
+            keyPassword   "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+            debuggable true
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

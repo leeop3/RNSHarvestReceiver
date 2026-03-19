@@ -34,6 +34,11 @@ jobs:
           gradle wrapper --gradle-version 8.7 --distribution-type bin
           echo "Wrapper jar: $(stat -c%s gradle/wrapper/gradle-wrapper.jar) bytes"
 
+      - name: Generate debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair -v             -keystore ~/.android/debug.keystore             -alias androiddebugkey             -keyalg RSA -keysize 2048             -validity 10000             -storepass android             -keypass android             -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
+
       - name: Run unit tests
         run: ./gradlew test --no-daemon --stacktrace
 
@@ -65,6 +70,21 @@ jobs:
 
       - name: Bootstrap gradle-wrapper.jar
         run: gradle wrapper --gradle-version 8.7 --distribution-type bin
+
+      - name: Generate debug keystore
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v               -keystore ~/.android/debug.keystore               -alias androiddebugkey               -keyalg RSA -keysize 2048               -validity 10000               -storepass android               -keypass android               -dname "CN=Android Debug,O=Android,C=US"
+            echo "Debug keystore created"
+          else
+            echo "Debug keystore already exists"
+          fi
+
+      - name: Generate debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair -v             -keystore ~/.android/debug.keystore             -alias androiddebugkey             -keyalg RSA -keysize 2048             -validity 10000             -storepass android             -keypass android             -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
