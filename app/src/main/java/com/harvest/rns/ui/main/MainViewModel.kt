@@ -60,6 +60,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ─── Radio Config ─────────────────────────────────────────────────────────
     val radioConfig: LiveData<RadioConfig> = RNSReceiverService.radioConfig.asLiveData()
+    val ownAddress:  LiveData<String>      = RNSReceiverService.ownAddress.asLiveData()
 
     fun applyRadioConfig(config: RadioConfig) {
         _boundService?.applyRadioConfig(config)

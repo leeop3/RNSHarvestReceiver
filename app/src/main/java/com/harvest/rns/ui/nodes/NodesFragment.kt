@@ -10,8 +10,12 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import com.harvest.rns.databinding.FragmentNodesBinding
+import com.harvest.rns.data.model.ConnectionStatus
+import com.harvest.rns.network.RNSReceiverService
 import com.harvest.rns.ui.main.MainViewModel
+import kotlinx.coroutines.launch
 
 class NodesFragment : Fragment() {
 
@@ -19,6 +23,9 @@ class NodesFragment : Fragment() {
     private val binding get() = _binding!!
     private val viewModel: MainViewModel by activityViewModels()
     private lateinit var adapter: NodesAdapter
+
+    // Rolling log of raw frames for debugging
+    private val logLines = mutableListOf<String>()
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -31,17 +38,24 @@ class NodesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         adapter = NodesAdapter { node ->
-            // Long-tap copies address to clipboard
-            val clip = ClipData.newPlainText("RNS Address", node.destinationHash)
-            val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            cm.setPrimaryClip(clip)
-            Toast.makeText(requireContext(), "Address copied: ${node.destinationHash}", Toast.LENGTH_SHORT).show()
+            copyToClipboard(node.destinationHash, "RNS Address")
         }
         binding.recyclerView.adapter = adapter
 
-        binding.clearBtn.setOnClickListener {
-            viewModel.clearDiscoveredNodes()
+        // ── Own address ──────────────────────────────────────────────────
+        viewModel.ownAddress.observe(viewLifecycleOwner) { addr ->
+            // Format as groups of 4 for readability: 1a2b3c4d5e6f7a8b9c0d
+            val formatted = addr.chunked(4).joinToString(" ")
+            binding.ownAddressText.text = formatted
         }
+
+        binding.copyAddressBtn.setOnClickListener {
+            val addr = viewModel.ownAddress.value ?: return@setOnClickListener
+            copyToClipboard(addr, "Receiver Address")
+        }
+
+        // ── Discovered nodes ─────────────────────────────────────────────
+        binding.clearBtn.setOnClickListener { viewModel.clearDiscoveredNodes() }
 
         viewModel.discoveredNodeList.observe(viewLifecycleOwner) { nodes ->
             adapter.submitList(nodes)
@@ -49,11 +63,35 @@ class NodesFragment : Fragment() {
             binding.nodeCountText.text    = "${nodes.size} node(s) discovered"
         }
 
+        // ── Connection hint ───────────────────────────────────────────────
         viewModel.connectionStatus.observe(viewLifecycleOwner) { status ->
             binding.connectionHintText.visibility =
-                if (status is com.harvest.rns.data.model.ConnectionStatus.Connected)
-                    View.GONE else View.VISIBLE
+                if (status is ConnectionStatus.Connected) View.GONE else View.VISIBLE
         }
+
+        // ── Raw frame log ─────────────────────────────────────────────────
+        binding.clearLogBtn.setOnClickListener {
+            logLines.clear()
+            binding.rawLogText.text = "(cleared)"
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            RNSReceiverService.rawFrameLog.collect { line ->
+                logLines.add(line)
+                if (logLines.size > 30) logLines.removeAt(0)
+                binding.rawLogText.text = logLines.joinToString("\n")
+                // Auto-scroll to bottom
+                binding.logScrollView.post {
+                    binding.logScrollView.fullScroll(View.FOCUS_DOWN)
+                }
+            }
+        }
+    }
+
+    private fun copyToClipboard(text: String, label: String) {
+        val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText(label, text))
+        Toast.makeText(requireContext(), "Copied: $text", Toast.LENGTH_SHORT).show()
     }
 
     override fun onDestroyView() {
@@ -61,3 +99,4 @@ class NodesFragment : Fragment() {
         _binding = null
     }
 }
+

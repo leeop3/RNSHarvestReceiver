@@ -5,44 +5,38 @@ import android.util.Log
 /**
  * RNS (Reticulum Network Stack) frame decoder.
  *
- * Reticulum uses a binary packet format for all transport.
- * This decoder handles the RNS framing layer to extract LXMF payloads.
+ * RNS Packet Header (2 bytes):
  *
- * RNS Packet Structure:
- * ┌──────────────┬───────────────┬──────────────┬───────────┐
- * │ Header (2B)  │ Addresses     │ Transport ID  │ Data      │
- * └──────────────┴───────────────┴──────────────┴───────────┘
+ *   Byte 1:  [IFAC_FLAG | HEADER_TYPE | PROPAGATION_TYPE(2) | DESTINATION_TYPE(2) | PACKET_TYPE(2)]
+ *   Byte 2:  [HOPS(8)]
  *
- * Header byte 1:
- *   [7:6] ifac_flag (2 bits) - interface access code present
- *   [5]   header_type        - 0=type1, 1=type2
- *   [4:3] context_flag       - 0=NONE, 1=RESOURCE, 2=RESOURCE_ADV, 3=RESOURCE_REQ
- *   [2:1] propagation_type   - 0=BROADCAST, 1=TRANSPORT, 2=RELAY, 3=TUNNEL
- *   [0]   destination_type   - 0=SINGLE, 1=GROUP, 2=PLAIN, 3=LINK
+ * Actual bit layout from the Reticulum source (RNS/Packet.py):
+ *   bits 7-6: header_type   (0 = 1 address, 1 = 2 addresses)
+ *   bits 5-4: propagation   (0 = broadcast, 1 = transport, 2 = relay, 3 = tunnel)
+ *   bits 3-2: destination   (0 = single, 1 = group, 2 = plain, 3 = link)
+ *   bits 1-0: packet_type   (0 = data, 1 = announce, 2 = link_request, 3 = proof)
  *
- * Header byte 2:
- *   [7:4] packet_type        - 0=DATA, 1=ANNOUNCE, 2=LINK_REQUEST, 3=PROOF
- *   [3:0] hops               - hop count
+ *   NOTE: The IFAC bit is bit 7 of byte 0 when IFAC is in use, shifting everything.
+ *   For standard (non-IFAC) interfaces: byte 0 = flags/type, byte 1 = hops.
  *
- * Reference: https://reticulum.network/manual/understanding.html
+ * Reference: https://github.com/markqvist/Reticulum/blob/master/RNS/Packet.py
  */
 object RnsFrameDecoder {
 
     private const val TAG = "RnsFrameDecoder"
 
-    // Packet type constants
+    // Packet type constants (bits 1:0 of header byte 0)
     const val PACKET_TYPE_DATA         = 0x00
     const val PACKET_TYPE_ANNOUNCE     = 0x01
     const val PACKET_TYPE_LINK_REQUEST = 0x02
     const val PACKET_TYPE_PROOF        = 0x03
 
-    // Context types
-    const val CONTEXT_NONE         = 0x00
-    const val CONTEXT_RESOURCE     = 0x01
-    const val CONTEXT_LXMF_MESSAGE = 0x04  // LXMF uses context 0x04 for messages
+    // Header type (bit 6 of header byte 0)
+    const val HEADER_TYPE_1 = 0  // single address field
+    const val HEADER_TYPE_2 = 1  // two address fields
 
     // Address sizes
-    const val TRUNCATED_HASH_SIZE = 10  // RNS uses 10-byte truncated hashes
+    const val TRUNCATED_HASH_SIZE = 10  // RNS uses 10-byte truncated hashes on wire
     const val FULL_HASH_SIZE      = 32
 
     data class RnsPacket(
@@ -50,154 +44,134 @@ object RnsFrameDecoder {
         val headerType:      Int,
         val propagationType: Int,
         val destinationType: Int,
-        val context:         Int,
         val hops:            Int,
         val destinationHash: ByteArray,
         val transportId:     ByteArray?,
         val data:            ByteArray,
-        val isIfacPresent:   Boolean
+        val ifacFlag:        Boolean
     )
 
     /**
-     * Decode an RNS packet from raw bytes received over the Bluetooth serial link.
+     * Decode an RNS packet from raw KISS-unescaped bytes.
      *
-     * The RNode interface wraps RNS packets with HDLC-like framing.
-     * This function expects already-unframed RNS packet bytes.
-     *
-     * @param raw Raw RNS packet bytes (HDLC-unescaped)
-     * @return Decoded RnsPacket or null if invalid
+     * We log the raw hex of every incoming frame at DEBUG level so that
+     * if packet type detection is wrong, the logs show exactly what arrived.
      */
     fun decode(raw: ByteArray): RnsPacket? {
-        if (raw.size < 4) {
-            Log.w(TAG, "Packet too short: ${raw.size}")
+        if (raw.size < 2 + TRUNCATED_HASH_SIZE) {
+            Log.d(TAG, "Frame too short (${raw.size}b): ${raw.toHex()}")
             return null
         }
+
+        // Log full raw bytes for debugging announce issues
+        Log.d(TAG, "RAW frame (${raw.size}b): ${raw.take(32).toByteArray().toHex()}${if (raw.size > 32) "…" else ""}")
 
         return try {
             var offset = 0
 
-            // Parse header bytes
-            val header1 = raw[offset++].toInt() and 0xFF
-            val header2 = raw[offset++].toInt() and 0xFF
+            val h0 = raw[offset++].toInt() and 0xFF
+            val h1 = raw[offset++].toInt() and 0xFF
 
-            val isIfacPresent    = (header1 ushr 7) and 0x01 == 1
-            val headerType       = (header1 ushr 6) and 0x01
-            val contextFlag      = (header1 ushr 4) and 0x03
-            val propagationType  = (header1 ushr 2) and 0x03
-            val destinationType  = header1 and 0x01
+            // Check for IFAC flag (bit 7 of h0) — interface access code present
+            val ifacFlag = (h0 ushr 7) and 0x01 == 1
 
-            val packetType = (header2 ushr 4) and 0x0F
-            val hops       = header2 and 0x0F
-
-            // IFAC bytes (interface access code) - skip if present
-            if (isIfacPresent) {
-                val ifacSize = 16 // IFAC is always 16 bytes when present
-                if (offset + ifacSize > raw.size) return null
-                offset += ifacSize
+            // Header byte after possible IFAC stripping
+            val headerByte = if (ifacFlag) {
+                // IFAC mode: h0 is the IFAC byte, h1 is the actual header
+                // and we need to read one more byte for hops
+                if (raw.size < 3 + TRUNCATED_HASH_SIZE) return null
+                h1
+            } else {
+                h0
             }
 
-            // Destination hash (always TRUNCATED_HASH_SIZE bytes for type-1 packets)
-            val hashSize = TRUNCATED_HASH_SIZE
-            if (offset + hashSize > raw.size) return null
-            val destHash = raw.copyOfRange(offset, offset + hashSize)
-            offset += hashSize
+            val hops = if (ifacFlag) {
+                raw[offset++].toInt() and 0xFF
+            } else {
+                h1
+            }
 
-            // Transport ID (only present for type-2 headers or TRANSPORT propagation)
-            val transportId: ByteArray? = if (headerType == 1 || propagationType == 1) {
+            // Parse header fields from headerByte
+            val headerType      = (headerByte ushr 6) and 0x03  // bits 7:6
+            val propagationType = (headerByte ushr 4) and 0x03  // bits 5:4
+            val destinationType = (headerByte ushr 2) and 0x03  // bits 3:2
+            val packetType      = headerByte and 0x03            // bits 1:0
+
+            Log.d(TAG, "Header: h0=0x${h0.toString(16)} h1=0x${h1.toString(16)} " +
+                    "ifac=$ifacFlag hdrType=$headerType prop=$propagationType " +
+                    "dst=$destinationType pktType=$packetType hops=$hops")
+
+            // Destination hash (first address)
+            if (offset + TRUNCATED_HASH_SIZE > raw.size) return null
+            val destHash = raw.copyOfRange(offset, offset + TRUNCATED_HASH_SIZE)
+            offset += TRUNCATED_HASH_SIZE
+
+            // Second address (transport ID) — present for header type 1 (2-address)
+            val transportId: ByteArray? = if (headerType == HEADER_TYPE_2) {
                 if (offset + TRUNCATED_HASH_SIZE > raw.size) return null
                 val tid = raw.copyOfRange(offset, offset + TRUNCATED_HASH_SIZE)
                 offset += TRUNCATED_HASH_SIZE
                 tid
             } else null
 
-            // Context byte
-            val context = if (offset < raw.size) {
-                val ctx = raw[offset++].toInt() and 0xFF
-                ctx
-            } else 0
+            // Remaining bytes are payload
+            val data = if (offset < raw.size) raw.copyOfRange(offset, raw.size)
+                       else ByteArray(0)
 
-            // Remaining bytes are the data payload
-            val data = if (offset < raw.size) {
-                raw.copyOfRange(offset, raw.size)
-            } else ByteArray(0)
+            Log.i(TAG, "Decoded: type=$packetType hops=$hops dest=${destHash.toHex()} data=${data.size}b")
 
             RnsPacket(
                 packetType      = packetType,
                 headerType      = headerType,
                 propagationType = propagationType,
                 destinationType = destinationType,
-                context         = context,
                 hops            = hops,
                 destinationHash = destHash,
                 transportId     = transportId,
                 data            = data,
-                isIfacPresent   = isIfacPresent
-            ).also {
-                Log.v(TAG, "Decoded RNS packet: type=$packetType ctx=$context hops=$hops data=${data.size}b")
-            }
+                ifacFlag        = ifacFlag
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "Decode error: ${e.message}", e)
+            Log.e(TAG, "Decode error: ${e.message}")
             null
         }
     }
 
-    /**
-     * RNode HDLC-like serial framing decoder.
-     * RNode wraps RNS packets in a simple frame format for serial transmission.
-     *
-     * RNode Frame:
-     *   [0xC0]  KISS FEND (frame start)
-     *   [0x00]  KISS command (0 = data frame)
-     *   [data]  Escaped packet bytes
-     *   [0xC0]  KISS FEND (frame end)
-     *
-     * KISS escaping:
-     *   0xC0 in data → 0xDB 0xDC
-     *   0xDB in data → 0xDB 0xDD
-     */
+    private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
+    private fun List<Byte>.toByteArray() = ByteArray(size) { this[it] }
+
+    // ─── KISS Framer ──────────────────────────────────────────────────────────
+
     object KissFramer {
-        const val FEND  = 0xC0.toByte()
-        const val FESC  = 0xDB.toByte()
-        const val TFEND = 0xDC.toByte()
-        const val TFESC = 0xDD.toByte()
+        const val FEND    = 0xC0.toByte()
+        const val FESC    = 0xDB.toByte()
+        const val TFEND   = 0xDC.toByte()
+        const val TFESC   = 0xDD.toByte()
         const val CMD_DATA = 0x00.toByte()
 
-        /**
-         * Extract complete KISS frames from a byte stream buffer.
-         * Returns list of unescaped data payloads (without FEND and command byte).
-         */
         fun extractFrames(buffer: ByteArray): List<ByteArray> {
             val frames = mutableListOf<ByteArray>()
             var i = 0
-
             while (i < buffer.size) {
-                // Find frame start
                 if (buffer[i] != FEND) { i++; continue }
-                i++ // skip FEND
-
-                // Read command byte
+                i++
                 if (i >= buffer.size) break
                 val cmd = buffer[i++]
-
-                // Read until closing FEND
                 val frameData = mutableListOf<Byte>()
                 while (i < buffer.size && buffer[i] != FEND) {
                     val b = buffer[i++]
                     when (b) {
-                        FESC -> {
-                            if (i < buffer.size) {
-                                frameData.add(when (buffer[i++]) {
-                                    TFEND -> FEND
-                                    TFESC -> FESC
-                                    else  -> b
-                                })
-                            }
+                        FESC -> if (i < buffer.size) {
+                            frameData.add(when (buffer[i++]) {
+                                TFEND -> FEND
+                                TFESC -> FESC
+                                else  -> b
+                            })
                         }
                         else -> frameData.add(b)
                     }
                 }
-                if (i < buffer.size) i++ // skip closing FEND
-
+                if (i < buffer.size) i++
                 if (cmd == CMD_DATA && frameData.isNotEmpty()) {
                     frames.add(frameData.toByteArray())
                 }
@@ -205,19 +179,13 @@ object RnsFrameDecoder {
             return frames
         }
 
-        /**
-         * Encode data into a KISS frame for sending to RNode.
-         */
         fun encodeFrame(data: ByteArray): ByteArray {
             val out = mutableListOf<Byte>()
-            out.add(FEND)
-            out.add(CMD_DATA)
-            for (b in data) {
-                when (b) {
-                    FEND -> { out.add(FESC); out.add(TFEND) }
-                    FESC -> { out.add(FESC); out.add(TFESC) }
-                    else -> out.add(b)
-                }
+            out.add(FEND); out.add(CMD_DATA)
+            for (b in data) when (b) {
+                FEND -> { out.add(FESC); out.add(TFEND) }
+                FESC -> { out.add(FESC); out.add(TFESC) }
+                else -> out.add(b)
             }
             out.add(FEND)
             return out.toByteArray()

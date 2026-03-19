@@ -7,15 +7,87 @@
     android:orientation="vertical"
     android:background="@color/bg_primary">
 
-    <!-- Header bar -->
+    <!-- ── THIS APP'S OWN ADDRESS ─────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/color_primary_dark"
+        android:paddingHorizontal="14dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="10dp"
+        android:elevation="4dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="THIS RECEIVER'S ADDRESS"
+            android:textColor="@color/text_hint"
+            android:textSize="10sp"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/ownAddressText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="generating…"
+                android:textColor="@color/accent_green"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.05" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/copyAddressBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="COPY"
+                android:textSize="11sp"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                app:strokeColor="@color/accent_green"
+                android:textColor="@color/accent_green" />
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Key this address into field harvesters as their LXMF destination"
+            android:textColor="@color/text_hint"
+            android:textSize="10sp"
+            android:layout_marginTop="4dp" />
+
+    </LinearLayout>
+
+    <!-- ── CONNECTION HINT ────────────────────────────────────────────── -->
+    <TextView
+        android:id="@+id/connectionHintText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⚠ Connect to RNode to discover nearby nodes"
+        android:textColor="@color/accent_amber"
+        android:textSize="12sp"
+        android:padding="8dp"
+        android:background="@color/header_bg"
+        android:visibility="visible" />
+
+    <!-- ── DISCOVERED NODES HEADER ────────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:background="@color/bg_card"
-        android:padding="10dp"
-        android:gravity="center_vertical"
-        android:elevation="2dp">
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp"
+        android:gravity="center_vertical">
 
         <TextView
             android:id="@+id/nodeCountText"
@@ -30,28 +102,15 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/clearBtn"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="32dp"
             android:text="Clear"
-            android:textSize="12sp"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            app:strokeColor="@color/text_hint"
+            android:textSize="11sp"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
             android:textColor="@color/text_hint" />
 
     </LinearLayout>
 
-    <!-- Connection hint -->
-    <TextView
-        android:id="@+id/connectionHintText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="⚠ Connect to RNode to discover nearby nodes"
-        android:textColor="@color/accent_amber"
-        android:textSize="12sp"
-        android:padding="8dp"
-        android:background="@color/header_bg"
-        android:visibility="visible" />
-
-    <!-- Node list -->
+    <!-- ── NODES LIST ─────────────────────────────────────────────────── -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -77,28 +136,84 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="🔍"
-                android:textSize="48sp" />
+                android:textSize="42sp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="No nodes discovered yet"
                 android:textColor="@color/text_secondary"
-                android:textSize="16sp"
-                android:layout_marginTop="12dp" />
+                android:textSize="15sp"
+                android:layout_marginTop="10dp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Nodes announce themselves automatically when they power on or send data. Make sure your RNode is connected and radio parameters match the network."
+                android:text="Nodes announce when they power on or transmit.\nEnsure radio parameters match the network."
                 android:textColor="@color/text_hint"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textAlignment="center"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 android:paddingHorizontal="32dp" />
 
         </LinearLayout>
 
     </FrameLayout>
+
+    <!-- ── RAW FRAME LOG (debug) ──────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/color_primary_dark">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="6dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="RAW FRAME LOG"
+                android:textColor="@color/text_hint"
+                android:textSize="10sp"
+                android:letterSpacing="0.1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/clearLogBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:text="Clear"
+                android:textSize="10sp"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:textColor="@color/text_hint" />
+
+        </LinearLayout>
+
+        <ScrollView
+            android:id="@+id/logScrollView"
+            android:layout_width="match_parent"
+            android:layout_height="80dp"
+            android:background="@color/bg_primary"
+            android:paddingHorizontal="14dp">
+
+            <TextView
+                android:id="@+id/rawLogText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="(no frames yet)"
+                android:textColor="@color/text_hint"
+                android:textSize="9sp"
+                android:fontFamily="monospace"
+                android:paddingVertical="6dp" />
+
+        </ScrollView>
+
+    </LinearLayout>
 
 </LinearLayout>
