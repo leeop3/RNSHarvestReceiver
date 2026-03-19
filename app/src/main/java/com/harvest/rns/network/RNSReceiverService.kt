@@ -327,22 +327,29 @@ class RNSReceiverService : Service() {
 
                 // Minimal announce payload:
                 // 32 bytes Ed25519 pub key placeholder + 32 bytes X25519 placeholder
-                // + app data "lxmf.delivery RNS Harvest Receiver"
-                val appData = "lxmf.delivery RNS Harvest Receiver".toByteArray(Charsets.UTF_8)
+                // + app data "lxmf.delivery\u0000RNS Harvest Receiver"
+                val appData = "lxmf.delivery\u0000RNS Harvest Receiver".toByteArray(Charsets.UTF_8)
                 val keyPlaceholder = ByteArray(64) { 0x00 }
                 val nameHash = ByteArray(10) { 0x00 }
                 val randomBlob = ByteArray(10) { (it * 7).toByte() }
                 val sigPlaceholder = ByteArray(64) { 0x00 }
 
-                val announceData = keyPlaceholder + nameHash + randomBlob + appData + sigPlaceholder
+                // Concatenate ByteArrays (Kotlin has no + for ByteArray)
+                fun concat(vararg arrays: ByteArray): ByteArray {
+                    val total = arrays.sumOf { it.size }
+                    val out = ByteArray(total)
+                    var pos = 0
+                    for (a in arrays) { a.copyInto(out, pos); pos += a.size }
+                    return out
+                }
+
+                val announceData = concat(keyPlaceholder, nameHash, randomBlob, appData, sigPlaceholder)
 
                 // Build RNS packet bytes
-                // Header: type=ANNOUNCE(0x01), propagation=BROADCAST(0x00), hdrType=1addr
-                // headerByte = 0b00_00_00_01 = 0x01
                 val header0 = 0x01.toByte()  // ANNOUNCE, broadcast, single dest
                 val header1 = 0x00.toByte()  // 0 hops
 
-                val packet = byteArrayOf(header0, header1) + hashBytes + announceData
+                val packet = concat(byteArrayOf(header0, header1), hashBytes, announceData)
 
                 // Wrap in KISS frame and send
                 val kissFrame = RnsFrameDecoder.KissFramer.encodeFrame(packet)
