@@ -13,17 +13,23 @@ import java.util.*
 class IncomingRecordsAdapter :
     ListAdapter<HarvestRecord, IncomingRecordsAdapter.ViewHolder>(DiffCallback()) {
 
+    // Keep a full copy so filter() can restore it
     private var fullList: List<HarvestRecord> = emptyList()
 
-    fun submitList(list: List<HarvestRecord>) {
+    /**
+     * Submit a new complete list, saving a copy for filtering.
+     * Renamed to setRecords() to avoid JVM signature clash with
+     * ListAdapter.submitList(MutableList?) which erases to the same type.
+     */
+    fun setRecords(list: List<HarvestRecord>) {
         fullList = list
-        super.submitList(list)
+        submitList(list)
     }
 
     fun filter(query: String) {
         val q = query.trim().lowercase()
         if (q.isEmpty()) {
-            super.submitList(fullList)
+            submitList(fullList)
         } else {
             val filtered = fullList.filter { record ->
                 record.harvesterId.lowercase().contains(q) ||
@@ -31,7 +37,7 @@ class IncomingRecordsAdapter :
                 record.externalId.lowercase().contains(q) ||
                 record.timestamp.contains(q)
             }
-            super.submitList(filtered)
+            submitList(filtered)
         }
     }
 
@@ -65,17 +71,15 @@ class IncomingRecordsAdapter :
             binding.timestampText.text    = formatTimestamp(record.timestamp)
             binding.recordIdText.text     = "#${record.externalId}"
 
-            // Color-code ripe bunch count
-            val ripeBunchesInt = record.ripeBunches
+            // Colour-code ripe bunch count
             binding.ripeBunchesText.setTextColor(
                 when {
-                    ripeBunchesInt >= 20 -> 0xFF2E7D32.toInt() // green
-                    ripeBunchesInt >= 10 -> 0xFFF57F17.toInt() // amber
-                    else                 -> 0xFFC62828.toInt() // red
+                    record.ripeBunches >= 20 -> 0xFF2E7D32.toInt()
+                    record.ripeBunches >= 10 -> 0xFFF57F17.toInt()
+                    else                     -> 0xFFC62828.toInt()
                 }
             )
 
-            // Show photo indicator
             binding.photoIndicator.visibility =
                 if (record.photoFile.isNotBlank()) android.view.View.VISIBLE
                 else android.view.View.GONE
