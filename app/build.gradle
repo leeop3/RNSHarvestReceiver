@@ -43,6 +43,14 @@ android {
     buildFeatures {
         viewBinding true
     }
+
+    testOptions {
+        unitTests {
+            // Prevent "Method X in android.util.Log not mocked" RuntimeException
+            // in JVM unit tests. Returns default values instead of throwing.
+            returnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
