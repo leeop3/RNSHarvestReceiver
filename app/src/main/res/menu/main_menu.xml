@@ -14,6 +14,11 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_radio_settings"
+        android:title="Radio Settings"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_clear_data"
         android:title="Clear All Data"
         app:showAsAction="never" />

@@ -1,6 +1,7 @@
 package com.harvest.rns.ui.main
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -24,60 +25,113 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = HarvestDatabase.getInstance(application).harvestDao()
     val repository  = HarvestRepository(dao)
 
-    // ─── Selected Date Filter ─────────────────────────────────────────────────
+    // ─── Date navigation (shared between Incoming and Summary tabs) ───────────
     private val _selectedDate = MutableLiveData(todayDate())
     val selectedDate: LiveData<String> = _selectedDate
-    fun setSelectedDate(date: String) { _selectedDate.value = date }
 
-    // ─── Records ──────────────────────────────────────────────────────────────
-    val allRecords:     LiveData<List<HarvestRecord>>     = repository.allRecords
-    val recordCount:    LiveData<Int>                     = repository.recordCount
-    val availableDates: LiveData<List<String>>            = repository.availableDates
-    val allSummaries:   LiveData<List<HarvesterSummary>>  = repository.allSummaries
+    fun goToPreviousDate() {
+        _selectedDate.value = offsetDate(_selectedDate.value ?: todayDate(), -1)
+    }
+    fun goToNextDate() {
+        val next = offsetDate(_selectedDate.value ?: todayDate(), +1)
+        if (next <= todayDate()) _selectedDate.value = next
+    }
+    fun canGoForward(): Boolean = (_selectedDate.value ?: todayDate()) < todayDate()
 
-    fun getSummaryForDate(date: String) = dao.getSummaryByDate(date)
-
-    // ─── Service Stats ────────────────────────────────────────────────────────
-    val messageCount:   LiveData<Int>    = RNSReceiverService.messageCount.asLiveData()
-    val duplicateCount: LiveData<Int>    = RNSReceiverService.duplicateCount.asLiveData()
-    val serviceStatus:  LiveData<String> = RNSReceiverService.serviceStatus.asLiveData()
-    val lastMessageTime:LiveData<Long>   = RNSReceiverService.lastMessageTime.asLiveData()
-
-    // ─── Discovered Nodes ─────────────────────────────────────────────────────
-    val discoveredNodes: LiveData<Map<String, DiscoveredNode>> =
-        RNSReceiverService.discoveredNodes.asLiveData()
-
-    val discoveredNodeList: LiveData<List<DiscoveredNode>> =
-        RNSReceiverService.discoveredNodes
-            .map { it.values.sortedByDescending { n -> n.lastSeen } }
-            .asLiveData()
-
-    fun clearDiscoveredNodes() {
-        // Delegate to the service singleton
-        RNSReceiverService.discoveredNodes  // trigger via binder if needed
-        _boundService?.clearDiscoveredNodes()
+    private fun offsetDate(date: String, days: Int): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val cal = Calendar.getInstance().also { it.time = sdf.parse(date) ?: Date() }
+        cal.add(Calendar.DAY_OF_YEAR, days)
+        return sdf.format(cal.time)
     }
 
-    // ─── Radio Config ─────────────────────────────────────────────────────────
+    // ─── Records ──────────────────────────────────────────────────────────────
+    val allRecords:     LiveData<List<HarvestRecord>>    = repository.allRecords
+    val recordCount:    LiveData<Int>                    = repository.recordCount
+    val availableDates: LiveData<List<String>>           = repository.availableDates
+    val allSummaries:   LiveData<List<HarvesterSummary>> = repository.allSummaries
+
+    fun getRecordsByDate(date: String) = dao.getRecordsByDate(date)
+    fun getSummaryForDate(date: String) = dao.getSummaryByDate(date)
+
+    // ─── Node nicknames (stored in SharedPreferences) ─────────────────────────
+    private val nickPrefs by lazy {
+        application.getSharedPreferences("node_nicknames", Context.MODE_PRIVATE)
+    }
+
+    fun getNickname(hash: String): String? = nickPrefs.getString(hash, null)
+
+    fun setNickname(hash: String, nick: String) {
+        if (nick.isBlank()) nickPrefs.edit().remove(hash).apply()
+        else nickPrefs.edit().putString(hash, nick.trim()).apply()
+        // Trigger refresh of nodes list
+        val current = RNSReceiverService.discoveredNodes.value.toMutableMap()
+        current[hash]?.let { node ->
+            current[hash] = node.copy(displayName = nick.trim().ifBlank { null })
+            // Note: this updates the in-memory map but won't persist across service restart
+            // The nickPrefs is the persistent store
+        }
+        _nickUpdate.value = System.currentTimeMillis() // trigger UI refresh
+    }
+
+    private val _nickUpdate = MutableLiveData<Long>()
+    val nickUpdate: LiveData<Long> = _nickUpdate
+
+    // ─── Service stats ────────────────────────────────────────────────────────
+    val messageCount:    LiveData<Int>    = RNSReceiverService.messageCount.asLiveData()
+    val duplicateCount:  LiveData<Int>    = RNSReceiverService.duplicateCount.asLiveData()
+    val serviceStatus:   LiveData<String> = RNSReceiverService.serviceStatus.asLiveData()
+    val lastMessageTime: LiveData<Long>   = RNSReceiverService.lastMessageTime.asLiveData()
+
+    // ─── Nodes ────────────────────────────────────────────────────────────────
+    val discoveredNodeList: LiveData<List<DiscoveredNode>> =
+        RNSReceiverService.discoveredNodes
+            .map { map ->
+                map.values
+                    .sortedByDescending { it.lastSeen }
+                    .map { node ->
+                        // Overlay nickname from prefs
+                        val nick = nickPrefs.getString(node.destinationHash, null)
+                        if (nick != null) node.copy(displayName = nick) else node
+                    }
+            }
+            .asLiveData()
+
+    fun clearDiscoveredNodes() { _boundService?.clearDiscoveredNodes() }
+
+    // ─── Radio ────────────────────────────────────────────────────────────────
     val radioConfig: LiveData<RadioConfig> = RNSReceiverService.radioConfig.asLiveData()
     val ownAddress:  LiveData<String>      = RNSReceiverService.ownAddress.asLiveData()
 
-    fun applyRadioConfig(config: RadioConfig) {
-        _boundService?.applyRadioConfig(config)
-    }
+    fun applyRadioConfig(config: RadioConfig) { _boundService?.applyRadioConfig(config) }
 
-    // ─── Connection Status ────────────────────────────────────────────────────
+    // ─── Connection ───────────────────────────────────────────────────────────
     private val _connectionStatus = MutableLiveData<ConnectionStatus>(ConnectionStatus.Disconnected)
     val connectionStatus: LiveData<ConnectionStatus> = _connectionStatus
-    fun updateConnectionStatus(status: ConnectionStatus) { _connectionStatus.postValue(status) }
+    fun updateConnectionStatus(s: ConnectionStatus) { _connectionStatus.postValue(s) }
 
-    // ─── Service reference (set by MainActivity after binding) ────────────────
+    // ─── Service binding ──────────────────────────────────────────────────────
     private var _boundService: RNSReceiverService? = null
-    fun bindService(service: RNSReceiverService) { _boundService = service }
+    fun bindService(s: RNSReceiverService) {
+        _boundService = s
+        // Apply saved radio config on connect
+        viewModelScope.launch {
+            val prefs = getApplication<android.app.Application>()
+                .getSharedPreferences(RadioConfig.PREFS_NAME, Context.MODE_PRIVATE)
+            val config = RadioConfig(
+                433_025_000L,
+                prefs.getInt(RadioConfig.PREF_BW, RadioConfig.DEFAULT.bandwidthHz),
+                prefs.getInt(RadioConfig.PREF_SF, RadioConfig.DEFAULT.spreadingFactor),
+                prefs.getInt(RadioConfig.PREF_CR, RadioConfig.DEFAULT.codingRate),
+                prefs.getInt(RadioConfig.PREF_TXPOWER, RadioConfig.DEFAULT.txPower)
+            )
+            s.applyRadioConfig(config)
+        }
+    }
     fun unbindService() { _boundService = null }
 
-    // ─── Data Management ──────────────────────────────────────────────────────
+    // ─── Data management ──────────────────────────────────────────────────────
     fun clearAllData() { viewModelScope.launch { repository.deleteAll() } }
 
-    private fun todayDate() = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+    fun todayDate(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 }

@@ -7,54 +7,42 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.harvest.rns.data.model.HarvesterSummary
 import com.harvest.rns.databinding.ItemHarvesterSummaryBinding
+import com.harvest.rns.ui.main.MainViewModel
 
-class SummaryAdapter :
+class SummaryAdapter(private val viewModel: MainViewModel) :
     ListAdapter<HarvesterSummary, SummaryAdapter.ViewHolder>(DiffCallback()) {
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val binding = ItemHarvesterSummaryBinding.inflate(
-            LayoutInflater.from(parent.context), parent, false
-        )
-        return ViewHolder(binding)
-    }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+        ViewHolder(ItemHarvesterSummaryBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(getItem(position))
-    }
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) =
+        holder.bind(getItem(position), position + 1, viewModel)
 
-    class ViewHolder(private val binding: ItemHarvesterSummaryBinding) :
-        RecyclerView.ViewHolder(binding.root) {
+    class ViewHolder(private val b: ItemHarvesterSummaryBinding) : RecyclerView.ViewHolder(b.root) {
+        fun bind(s: HarvesterSummary, rank: Int, viewModel: MainViewModel) {
+            val nick = viewModel.getNickname(s.harvesterId)
+            b.harvesterIdText.text  = nick ?: s.harvesterId
+            b.ripeBunchesText.text  = s.totalRipeBunches.toString()
+            b.emptyBunchesText.text = s.totalEmptyBunches.toString()
+            b.totalBunchesText.text = s.totalBunches.toString()
+            b.reportCountText.text  = "${s.reportCount} report(s)"
+            b.rankLabel.text        = "#$rank"
 
-        fun bind(summary: HarvesterSummary) {
-            binding.harvesterIdText.text   = summary.harvesterId
-            binding.ripeBunchesText.text   = summary.totalRipeBunches.toString()
-            binding.emptyBunchesText.text  = summary.totalEmptyBunches.toString()
-            binding.totalBunchesText.text  = summary.totalBunches.toString()
-            binding.reportCountText.text   = "${summary.reportCount} report(s)"
-            binding.rankLabel.text         = "#${adapterPosition + 1}"
-
-            // Efficiency ratio: ripe / total
-            val efficiency = if (summary.totalBunches > 0) {
-                (summary.totalRipeBunches.toFloat() / summary.totalBunches * 100).toInt()
-            } else 0
-
-            binding.efficiencyBar.progress = efficiency
-            binding.efficiencyText.text    = "$efficiency% ripe"
-
-            // Color code efficiency
-            val color = when {
-                efficiency >= 80 -> 0xFF2E7D32.toInt()  // green
-                efficiency >= 60 -> 0xFFF9A825.toInt()  // amber
-                else             -> 0xFFC62828.toInt()  // red
-            }
-            binding.efficiencyText.setTextColor(color)
+            val eff = if (s.totalBunches > 0)
+                (s.totalRipeBunches.toFloat() / s.totalBunches * 100).toInt() else 0
+            b.efficiencyBar.progress = eff
+            b.efficiencyText.text    = "$eff% ripe"
+            b.efficiencyText.setTextColor(when {
+                eff >= 80 -> 0xFF2E7D32.toInt()
+                eff >= 60 -> 0xFFF9A825.toInt()
+                else      -> 0xFFC62828.toInt()
+            })
         }
     }
 
     class DiffCallback : DiffUtil.ItemCallback<HarvesterSummary>() {
-        override fun areItemsTheSame(old: HarvesterSummary, new: HarvesterSummary) =
-            old.harvesterId == new.harvesterId && old.reportDate == new.reportDate
-        override fun areContentsTheSame(old: HarvesterSummary, new: HarvesterSummary) =
-            old == new
+        override fun areItemsTheSame(a: HarvesterSummary, b: HarvesterSummary) =
+            a.harvesterId == b.harvesterId && a.reportDate == b.reportDate
+        override fun areContentsTheSame(a: HarvesterSummary, b: HarvesterSummary) = a == b
     }
 }

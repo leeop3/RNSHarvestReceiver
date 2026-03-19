@@ -1,93 +1,98 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/bg_primary">
 
-    <!-- Toolbar row: count + search -->
+    <!-- Date navigator -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
         android:orientation="horizontal"
         android:background="@color/bg_card"
-        android:padding="8dp"
         android:gravity="center_vertical"
         android:elevation="2dp">
 
+        <ImageButton
+            android:id="@+id/prevDateBtn"
+            android:layout_width="52dp"
+            android:layout_height="match_parent"
+            android:src="@android:drawable/ic_media_previous"
+            android:tint="@color/accent_green"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="Previous date" />
+
         <TextView
-            android:id="@+id/recordCountText"
+            android:id="@+id/dateLabel"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="0 record(s) received"
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp"
-            android:fontFamily="monospace"
-            android:paddingStart="4dp" />
+            android:gravity="center"
+            android:text="Today"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="180dp"
-            android:layout_height="40dp"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense"
-            app:boxStrokeColor="@color/accent_green"
-            app:hintTextColor="@color/text_secondary">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/searchInput"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:hint="Search..."
-                android:textSize="13sp"
-                android:inputType="text"
-                android:textColor="@color/text_primary"
-                android:imeOptions="actionSearch" />
-
-        </com.google.android.material.textfield.TextInputLayout>
+        <ImageButton
+            android:id="@+id/nextDateBtn"
+            android:layout_width="52dp"
+            android:layout_height="match_parent"
+            android:src="@android:drawable/ic_media_next"
+            android:tint="@color/accent_green"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="Next date" />
 
     </LinearLayout>
 
-    <!-- Column headers -->
+    <!-- Record count -->
+    <TextView
+        android:id="@+id/recordCountText"
+        android:layout_width="match_parent"
+        android:layout_height="24dp"
+        android:text="0 record(s)"
+        android:textColor="@color/text_hint"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:paddingHorizontal="8dp"
+        android:gravity="center_vertical"
+        android:background="@color/header_bg" />
+
+    <!-- Column headers: Harvester | Block | Total | Time -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="32dp"
         android:orientation="horizontal"
-        android:background="@color/header_bg"
-        android:paddingHorizontal="4dp"
+        android:background="@color/header_bg_dark"
+        android:paddingHorizontal="6dp"
         android:gravity="center_vertical">
 
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1.2"
-            android:text="HARVESTER" style="@style/ColumnHeader" />
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-            android:text="BLOCK" style="@style/ColumnHeader" />
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.8"
-            android:text="RIPE" style="@style/ColumnHeader" />
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.8"
-            android:text="EMPTY" style="@style/ColumnHeader" />
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1.5"
-            android:text="LOCATION" style="@style/ColumnHeader" />
-        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1.2"
-            android:text="TIMESTAMP" style="@style/ColumnHeader" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1.5" android:text="HARVESTER"
+            style="@style/ColumnHeader" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1.0" android:text="BLOCK"
+            style="@style/ColumnHeader" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="0.8" android:text="TOTAL"
+            style="@style/ColumnHeader" android:gravity="center" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="0.7" android:text="TIME"
+            style="@style/ColumnHeader" android:gravity="end" />
 
     </LinearLayout>
 
-    <!-- Records list -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
+    <!-- List -->
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp"
         android:layout_weight="1">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingBottom="8dp"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
-        <!-- Empty state -->
         <LinearLayout
             android:id="@+id/emptyState"
             android:layout_width="match_parent"
@@ -96,29 +101,12 @@
             android:gravity="center"
             android:visibility="visible">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📡"
-                android:textSize="48sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Waiting for harvest reports..."
-                android:textColor="@color/text_secondary"
-                android:textSize="16sp"
-                android:layout_marginTop="12dp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Connect your RNode via the menu to start receiving data."
-                android:textColor="@color/text_hint"
-                android:textSize="13sp"
-                android:textAlignment="center"
-                android:layout_marginTop="6dp"
-                android:paddingHorizontal="32dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="📡" android:textSize="42sp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="No records for this date"
+                android:textColor="@color/text_secondary" android:textSize="15sp"
+                android:layout_marginTop="10dp" />
 
         </LinearLayout>
 

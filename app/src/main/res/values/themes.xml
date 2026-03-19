@@ -23,4 +23,13 @@
         <item name="android:fontFamily">monospace</item>
     </style>
 
+
+    <style name="RadioDialogTheme" parent="Theme.MaterialComponents.Dialog">
+        <item name="colorSurface">@color/bg_card</item>
+        <item name="android:colorBackground">@color/bg_card</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorPrimary">@color/accent_green</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+    </style>
+
 </resources>

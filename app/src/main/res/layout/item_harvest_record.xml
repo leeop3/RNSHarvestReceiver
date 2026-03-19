@@ -1,129 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@color/bg_primary">
 
-    <!-- Data row -->
+    <!-- 4 columns: Harvester | Block | Total | Time -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="40dp"
         android:orientation="horizontal"
-        android:paddingHorizontal="4dp"
-        android:paddingVertical="10dp"
+        android:paddingHorizontal="6dp"
         android:gravity="center_vertical"
         android:background="@color/bg_card">
 
-        <!-- Harvester ID -->
-        <LinearLayout
+        <!-- Harvester ID / nickname -->
+        <TextView
+            android:id="@+id/harvesterIdText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1.2"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/harvesterIdText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="H-001"
-                android:textColor="@color/accent_green"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:fontFamily="monospace" />
-
-            <TextView
-                android:id="@+id/recordIdText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="#0001"
-                android:textColor="@color/text_hint"
-                android:textSize="10sp"
-                android:fontFamily="monospace" />
-
-        </LinearLayout>
+            android:layout_weight="1.5"
+            android:textColor="@color/accent_green"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:singleLine="true"
+            android:ellipsize="end" />
 
         <!-- Block ID -->
         <TextView
             android:id="@+id/blockIdText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="BLK-A1"
+            android:layout_weight="1.0"
             android:textColor="@color/text_primary"
             android:textSize="12sp"
-            android:fontFamily="monospace" />
+            android:fontFamily="monospace"
+            android:singleLine="true"
+            android:ellipsize="end" />
 
-        <!-- Ripe Bunches -->
+        <!-- Total bunches (ripe + empty) -->
         <TextView
-            android:id="@+id/ripeBunchesText"
+            android:id="@+id/totalBunchesText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="0.8"
-            android:text="24"
-            android:textColor="@color/accent_green"
+            android:textColor="@color/white"
             android:textSize="14sp"
             android:textStyle="bold"
             android:gravity="center"
             android:fontFamily="monospace" />
 
-        <!-- Empty Bunches -->
-        <TextView
-            android:id="@+id/emptyBunchesText"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="0.8"
-            android:text="3"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:fontFamily="monospace" />
-
-        <!-- Location + Photo indicator -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1.5"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/locationText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="1.55432, 110.34521"
-                android:textColor="@color/text_secondary"
-                android:textSize="10sp"
-                android:fontFamily="monospace" />
-
-            <TextView
-                android:id="@+id/photoIndicator"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📷 photo"
-                android:textSize="10sp"
-                android:textColor="@color/accent_amber"
-                android:visibility="gone" />
-
-        </LinearLayout>
-
-        <!-- Timestamp -->
+        <!-- Time -->
         <TextView
             android:id="@+id/timestampText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1.2"
-            android:text="01 Jan 2025\n08:30:00"
-            android:textColor="@color/text_secondary"
-            android:textSize="10sp"
+            android:layout_weight="0.7"
+            android:textColor="@color/text_hint"
+            android:textSize="11sp"
+            android:gravity="end"
             android:fontFamily="monospace" />
+
+        <!-- Hidden views kept for adapter compatibility -->
+        <TextView android:id="@+id/ripeBunchesText"
+            android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="0"
+            android:visibility="gone" />
+        <TextView android:id="@+id/emptyBunchesText"
+            android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="0"
+            android:visibility="gone" />
 
     </LinearLayout>
 
-    <!-- Divider -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
+    <View android:layout_width="match_parent" android:layout_height="1dp"
         android:background="@color/divider" />
 
 </LinearLayout>

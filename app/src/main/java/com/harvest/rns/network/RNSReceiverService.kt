@@ -285,12 +285,72 @@ class RNSReceiverService : Service() {
                 val s = when (state) {
                     is BluetoothRNodeManager.BtState.Idle        -> "Not connected"
                     is BluetoothRNodeManager.BtState.Connecting  -> "Connecting to ${state.device.name}…"
-                    is BluetoothRNodeManager.BtState.Connected   -> "Connected: ${state.device.name}"
+                    is BluetoothRNodeManager.BtState.Connected   -> {
+                        // Announce ourselves on the network so other nodes know we exist
+                        delay(1000) // wait for radio to stabilise
+                        sendSelfAnnounce()
+                        "Connected: ${state.device.name}"
+                    }
                     is BluetoothRNodeManager.BtState.Reconnecting -> "Reconnecting…"
                     is BluetoothRNodeManager.BtState.Error       -> "Error: ${state.message}"
                 }
                 _serviceStatus.value = s
                 updateNotification(s)
+            }
+        }
+    }
+
+    /**
+     * Send an RNS ANNOUNCE packet so other nodes can discover this receiver
+     * and route LXMF messages to it.
+     *
+     * RNS ANNOUNCE structure (inside KISS DATA frame):
+     *   Header byte 0: propagation=BROADCAST, dest=SINGLE, type=ANNOUNCE
+     *                  = 0b00_00_00_01 = 0x01
+     *   Header byte 1: hops = 0
+     *   Dest hash:     our 10-byte address (first 10 bytes of our 16-byte address)
+     *   Data:          minimal announce payload (public key placeholder + app data)
+     *
+     * The announce tells the network: "this destination hash exists at this node".
+     * Other nodes' RNS stacks will accept LXMF messages addressed to this hash.
+     */
+    private fun sendSelfAnnounce() {
+        serviceScope.launch {
+            try {
+                val addr = _ownAddress.value
+                if (addr.length < 20) return@launch
+
+                // Convert hex address to bytes (use first 10 bytes for wire hash)
+                val hashBytes = ByteArray(10) { i ->
+                    addr.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+                }
+
+                // Minimal announce payload:
+                // 32 bytes Ed25519 pub key placeholder + 32 bytes X25519 placeholder
+                // + app data "lxmf.delivery RNS Harvest Receiver"
+                val appData = "lxmf.delivery RNS Harvest Receiver".toByteArray(Charsets.UTF_8)
+                val keyPlaceholder = ByteArray(64) { 0x00 }
+                val nameHash = ByteArray(10) { 0x00 }
+                val randomBlob = ByteArray(10) { (it * 7).toByte() }
+                val sigPlaceholder = ByteArray(64) { 0x00 }
+
+                val announceData = keyPlaceholder + nameHash + randomBlob + appData + sigPlaceholder
+
+                // Build RNS packet bytes
+                // Header: type=ANNOUNCE(0x01), propagation=BROADCAST(0x00), hdrType=1addr
+                // headerByte = 0b00_00_00_01 = 0x01
+                val header0 = 0x01.toByte()  // ANNOUNCE, broadcast, single dest
+                val header1 = 0x00.toByte()  // 0 hops
+
+                val packet = byteArrayOf(header0, header1) + hashBytes + announceData
+
+                // Wrap in KISS frame and send
+                val kissFrame = RnsFrameDecoder.KissFramer.encodeFrame(packet)
+                btManager.sendRawFrame(kissFrame)
+
+                Log.i(TAG, "Self-announce sent (${addr.take(8)}…)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Announce error: ${e.message}")
             }
         }
     }
