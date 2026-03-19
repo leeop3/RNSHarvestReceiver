@@ -132,9 +132,9 @@ object LxmfMessageParser {
             val reader = MsgpackReader(data)
 
             // Expect fixarray of 4 elements (0x94)
-            val arrayHeader = reader.readByte()
+            val arrayHeader = reader.readByte().toInt() and 0xFF
             val arraySize = when {
-                arrayHeader and 0xF0.toByte() == 0x90.toByte() -> (arrayHeader and 0x0F).toInt()
+                (arrayHeader and 0xF0) == 0x90 -> (arrayHeader and 0x0F)
                 else -> 4 // Assume 4 fields if format varies
             }
 
@@ -192,7 +192,7 @@ object LxmfMessageParser {
         fun readBinaryAsString(): String {
             val fmt = buf.get().toInt() and 0xFF
             val len = when {
-                fmt and 0xE0 == 0xA0  -> fmt and 0x1F          // fixstr
+                (fmt and 0xE0) == 0xA0  -> (fmt and 0x1F)          // fixstr
                 fmt == 0xC4           -> buf.get().toInt() and 0xFF  // bin8
                 fmt == 0xC5           -> buf.short.toInt() and 0xFFFF // bin16
                 fmt == 0xC6           -> buf.int                 // bin32
@@ -211,7 +211,7 @@ object LxmfMessageParser {
             val result = mutableMapOf<String, String>()
             val fmt = buf.get().toInt() and 0xFF
             val size = when {
-                fmt and 0xF0 == 0x80 -> fmt and 0x0F           // fixmap
+                (fmt and 0xF0) == 0x80 -> (fmt and 0x0F)           // fixmap
                 fmt == 0xDE          -> buf.short.toInt() and 0xFFFF // map16
                 fmt == 0xDF          -> buf.int                  // map32
                 else -> 0
@@ -228,8 +228,8 @@ object LxmfMessageParser {
 
         private fun readIntFromFormat(fmt: Int): Long {
             return when {
-                fmt and 0x80 == 0    -> fmt.toLong()            // positive fixint
-                fmt and 0xE0 == 0xE0 -> (fmt or -0x100).toLong() // negative fixint
+                (fmt and 0x80) == 0    -> fmt.toLong()            // positive fixint
+                (fmt and 0xE0) == 0xE0 -> (fmt or -0x100).toLong() // negative fixint
                 fmt == 0xCC          -> buf.get().toLong() and 0xFF
                 fmt == 0xCD          -> buf.short.toLong() and 0xFFFF
                 fmt == 0xCE          -> buf.int.toLong() and 0xFFFFFFFFL
