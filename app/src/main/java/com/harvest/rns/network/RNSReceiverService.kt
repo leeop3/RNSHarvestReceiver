@@ -169,30 +169,29 @@ class RNSReceiverService : Service() {
 
     private suspend fun processFrame(raw: ByteArray) {
         try {
-            // Always emit to raw log (for the Nodes tab debug visibility)
+            // Emit to raw log
             val hexPreview = raw.take(20).joinToString("") { "%02x".format(it) }
             _rawFrameLog.emit("${raw.size}b: $hexPreview${if (raw.size > 20) "…" else ""}")
+            Log.d(TAG, "Frame ${raw.size}b: $hexPreview")
 
             val pkt = RnsFrameDecoder.decode(raw)
 
             if (pkt == null) {
-                // Decode failed — try raw CSV anyway (simple senders)
+                Log.d(TAG, "RNS decode failed — trying as raw CSV")
                 tryRawCsv(raw)
                 return
             }
 
+            Log.d(TAG, "RNS pkt type=${pkt.packetType} data=${pkt.data.size}b")
+
             when (pkt.packetType) {
-                RnsFrameDecoder.PACKET_TYPE_ANNOUNCE -> {
-                    processAnnounce(pkt)
-                }
-                RnsFrameDecoder.PACKET_TYPE_DATA -> {
-                    processDataPacket(pkt)
-                }
+                RnsFrameDecoder.PACKET_TYPE_ANNOUNCE -> processAnnounce(pkt)
+                RnsFrameDecoder.PACKET_TYPE_DATA     -> processDataPacket(pkt)
                 else -> {
-                    // Unknown type — log and also try as announce in case
-                    // our bit parsing is off (belt-and-suspenders)
-                    Log.d(TAG, "Unknown packet type ${pkt.packetType} — also trying as announce")
-                    processAnnounce(pkt)
+                    // Unknown type — try both DATA and ANNOUNCE handling
+                    Log.d(TAG, "Unknown pkt type=${pkt.packetType}, trying DATA then ANNOUNCE")
+                    processDataPacket(pkt)   // try CSV/LXMF first
+                    processAnnounce(pkt)     // also register as node
                 }
             }
         } catch (e: Exception) {
@@ -230,33 +229,78 @@ class RNSReceiverService : Service() {
     // ─── DATA ─────────────────────────────────────────────────────────────────
 
     private suspend fun processDataPacket(pkt: RnsFrameDecoder.RnsPacket) {
+        Log.d(TAG, "processDataPacket: ${pkt.data.size}b payload")
+
+        // Strategy 1: try LXMF parse — harvester sent via Sideband/LXMF
         val lxmf = LxmfMessageParser.parse(pkt.data)
         if (lxmf != null && lxmf.content.isNotBlank()) {
-            Log.i(TAG, "LXMF from ${lxmf.sourceHashHex}")
+            Log.i(TAG, "LXMF message from ${lxmf.sourceHashHex}: '${lxmf.title}' (${lxmf.content.length} chars)")
             processCsvContent(lxmf.content)
-        } else {
-            tryRawCsv(pkt.data)
+            return
         }
+
+        // Strategy 2: try raw CSV on the stripped RNS payload
+        Log.d(TAG, "LXMF parse failed or empty — trying raw CSV on ${pkt.data.size}b payload")
+        if (tryRawCsv(pkt.data)) return
+
+        // Strategy 3: try the entire raw frame as CSV (sender bypassed RNS framing)
+        Log.d(TAG, "Payload CSV failed — no parseable data in this packet")
     }
 
-    private suspend fun tryRawCsv(data: ByteArray) {
-        val text = try { String(data, Charsets.UTF_8).trim() } catch (_: Exception) { return }
-        if (text.length > 5 && text.any { it == ',' }) {
-            processCsvContent(text)
+    /**
+     * Try to parse bytes as raw UTF-8 CSV text.
+     * Returns true if at least one record was successfully parsed.
+     */
+    private suspend fun tryRawCsv(data: ByteArray): Boolean {
+        val text = try {
+            String(data, Charsets.UTF_8).trim()
+        } catch (_: Exception) {
+            return false
         }
+
+        Log.d(TAG, "tryRawCsv: '${text.take(80).replace("\n", "↵")}'")
+
+        if (text.length < 3 || !text.any { it == ',' }) {
+            Log.d(TAG, "tryRawCsv: no commas found, not CSV")
+            return false
+        }
+
+        val records = CsvParser.parsePayload(text)
+        if (records.isEmpty()) {
+            Log.d(TAG, "tryRawCsv: CsvParser returned 0 records")
+            return false
+        }
+
+        processCsvContent(text)
+        return true
     }
 
     private suspend fun processCsvContent(csv: String) {
         val records = CsvParser.parsePayload(csv)
+        Log.i(TAG, "processCsvContent: ${records.size} record(s) from ${csv.length} chars")
         if (records.isEmpty()) return
+
         var newCount = 0
+        var dupCount = 0
         for (r in records) {
             when (repository.insertRecord(r)) {
-                is HarvestRepository.InsertResult.Success   -> { newCount++; _messageCount.value++; _lastMessageTime.value = System.currentTimeMillis() }
-                is HarvestRepository.InsertResult.Duplicate -> _duplicateCount.value++
-                else -> {}
+                is HarvestRepository.InsertResult.Success -> {
+                    newCount++
+                    _messageCount.value++
+                    _lastMessageTime.value = System.currentTimeMillis()
+                    Log.i(TAG, "Saved: ${r.harvesterId}/${r.blockId} ripe=${r.ripeBunches}")
+                }
+                is HarvestRepository.InsertResult.Duplicate -> {
+                    dupCount++
+                    _duplicateCount.value++
+                    Log.d(TAG, "Duplicate: ${r.externalId}")
+                }
+                is HarvestRepository.InsertResult.Error -> {
+                    Log.e(TAG, "DB insert error for ${r.externalId}")
+                }
             }
         }
+        Log.i(TAG, "processCsvContent done: $newCount new, $dupCount duplicate")
         if (newCount > 0) updateNotification("Received $newCount report(s) — Total: ${_messageCount.value}")
     }
 
