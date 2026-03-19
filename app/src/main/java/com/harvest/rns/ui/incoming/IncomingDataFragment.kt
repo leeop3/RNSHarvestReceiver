@@ -39,7 +39,7 @@ class IncomingDataFragment : Fragment() {
         })
 
         viewModel.allRecords.observe(viewLifecycleOwner) { records ->
-            adapter.submitList(records)
+            adapter.setRecords(records)
             binding.emptyState.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
             binding.recordCountText.text = "${records.size} record(s)"
         }

@@ -9,7 +9,7 @@ import com.harvest.rns.data.model.HarvestRecord
 @Database(
     entities = [HarvestRecord::class],
     version = 1,
-    exportSchema = true
+    exportSchema = false
 )
 abstract class HarvestDatabase : RoomDatabase() {
 

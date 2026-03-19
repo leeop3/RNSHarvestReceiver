@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_primary">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Connection warning -->
+        <TextView
+            android:id="@+id/connectionWarning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚠ Connect to RNode first to apply radio parameters"
+            android:textColor="@color/accent_amber"
+            android:textSize="12sp"
+            android:padding="10dp"
+            android:background="@color/header_bg"
+            android:layout_marginBottom="12dp"
+            android:visibility="visible" />
+
+        <!-- Preset Selector -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="QUICK PRESETS"
+            style="@style/ColumnHeader"
+            android:layout_marginBottom="6dp" />
+
+        <Spinner
+            android:id="@+id/presetSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/spinner_bg"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Divider -->
+        <View android:layout_width="match_parent" android:layout_height="1dp"
+            android:background="@color/divider" android:layout_marginBottom="20dp"/>
+
+        <!-- Frequency -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FREQUENCY (MHz)"
+            style="@style/ColumnHeader"
+            android:layout_marginBottom="6dp" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            app:boxStrokeColor="@color/accent_green"
+            app:hintTextColor="@color/text_secondary"
+            android:layout_marginBottom="16dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/frequencyInput"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:hint="e.g. 919.000"
+                android:inputType="numberDecimal"
+                android:textColor="@color/text_primary"
+                android:fontFamily="monospace"
+                android:textSize="16sp" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Bandwidth -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BANDWIDTH"
+            style="@style/ColumnHeader"
+            android:layout_marginBottom="6dp" />
+
+        <Spinner
+            android:id="@+id/bandwidthSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/spinner_bg"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Spreading Factor -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="SPREADING FACTOR"
+                style="@style/ColumnHeader" />
+
+            <TextView
+                android:id="@+id/sfValueText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SF8"
+                android:textColor="@color/accent_green"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+
+        </LinearLayout>
+
+        <!-- SF slider: SF7=0 … SF12=5 -->
+        <SeekBar
+            android:id="@+id/sfSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="5"
+            android:progress="1"
+            android:progressTint="@color/accent_green"
+            android:thumbTint="@color/accent_green"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="SF7 (fast)"
+                android:textColor="@color/text_hint" android:textSize="10sp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="SF12 (long range)"
+                android:textColor="@color/text_hint" android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- Coding Rate -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CODING RATE"
+            style="@style/ColumnHeader"
+            android:layout_marginBottom="6dp" />
+
+        <Spinner
+            android:id="@+id/codingRateSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/spinner_bg"
+            android:layout_marginBottom="16dp" />
+
+        <!-- TX Power -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="TX POWER"
+                style="@style/ColumnHeader" />
+
+            <TextView
+                android:id="@+id/txPowerValueText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="14 dBm"
+                android:textColor="@color/accent_amber"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/txPowerSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="17"
+            android:progress="14"
+            android:progressTint="@color/accent_amber"
+            android:thumbTint="@color/accent_amber"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="0 dBm (min)"
+                android:textColor="@color/text_hint" android:textSize="10sp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="17 dBm (max)"
+                android:textColor="@color/text_hint" android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- Config summary line -->
+        <TextView
+            android:id="@+id/configSummaryText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="—"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:background="@color/header_bg"
+            android:padding="10dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Apply button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/applyBtn"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="APPLY TO RNODE"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:backgroundTint="@color/accent_green"
+            android:enabled="false" />
+
+        <!-- Note -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="All nodes in the network must use identical radio parameters to communicate. Changes take effect immediately on the connected RNode."
+            android:textColor="@color/text_hint"
+            android:textSize="11sp"
+            android:layout_marginTop="12dp"
+            android:paddingHorizontal="4dp" />
+
+    </LinearLayout>
+
+</ScrollView>

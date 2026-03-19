@@ -46,10 +46,12 @@ class MainActivity : AppCompatActivity() {
             val binder = service as? RNSReceiverService.LocalBinder
             rnsService = binder?.getService()
             isServiceBound = true
+            rnsService?.let { viewModel.bindService(it) }
             observeServiceState()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
+            viewModel.unbindService()
             rnsService = null
             isServiceBound = false
         }
@@ -112,8 +114,10 @@ class MainActivity : AppCompatActivity() {
 
         TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
             tab.text = when (position) {
-                0 -> "📡 Incoming Data"
-                1 -> "📊 Harvester Summary"
+                0 -> "📡 Incoming"
+                1 -> "📊 Summary"
+                2 -> "🔍 Nodes"
+                3 -> "📻 Radio"
                 else -> ""
             }
         }.attach()

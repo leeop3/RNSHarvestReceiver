@@ -104,6 +104,21 @@ class BluetoothRNodeManager(private val context: Context) {
         }
     }
 
+    /**
+     * Send pre-built raw bytes directly to the RNode without additional KISS wrapping.
+     * Use this for RadioConfig frames which are already fully encoded.
+     */
+    fun sendRawFrame(data: ByteArray) {
+        scope.launch {
+            try {
+                outputStream?.write(data)
+                outputStream?.flush()
+            } catch (e: IOException) {
+                Log.e(TAG, "Send raw error: ${e.message}")
+            }
+        }
+    }
+
     // ─── Internal Connection Logic ────────────────────────────────────────────
 
     private suspend fun connectInternal(device: BluetoothDevice, attempt: Int = 1) {

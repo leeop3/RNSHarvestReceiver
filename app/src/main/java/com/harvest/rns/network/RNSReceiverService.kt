@@ -11,9 +11,12 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.harvest.rns.R
 import com.harvest.rns.data.db.HarvestDatabase
+import com.harvest.rns.data.model.DiscoveredNode
+import com.harvest.rns.data.model.RadioConfig
 import com.harvest.rns.data.repository.HarvestRepository
 import com.harvest.rns.network.bluetooth.BluetoothRNodeManager
 import com.harvest.rns.network.lxmf.LxmfMessageParser
+import com.harvest.rns.network.rns.RnsAnnounceParser
 import com.harvest.rns.network.rns.RnsFrameDecoder
 import com.harvest.rns.ui.main.MainActivity
 import com.harvest.rns.utils.CsvParser
@@ -25,7 +28,8 @@ import kotlinx.coroutines.flow.*
  * 1. Maintains the Bluetooth connection to the RNode device
  * 2. Continuously processes incoming RNS/LXMF frames
  * 3. Parses CSV harvest data and stores to Room DB
- * 4. Broadcasts status updates to the UI via LiveData/StateFlow
+ * 4. Listens for RNS ANNOUNCE packets to discover network nodes
+ * 5. Applies radio configuration to the RNode via KISS commands
  */
 class RNSReceiverService : Service() {
 
@@ -34,20 +38,26 @@ class RNSReceiverService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "rns_receiver_channel"
 
-        const val ACTION_CONNECT    = "com.harvest.rns.action.CONNECT"
-        const val ACTION_DISCONNECT = "com.harvest.rns.action.DISCONNECT"
-        const val EXTRA_DEVICE      = "extra_bluetooth_device"
+        const val ACTION_CONNECT      = "com.harvest.rns.action.CONNECT"
+        const val ACTION_DISCONNECT   = "com.harvest.rns.action.DISCONNECT"
+        const val ACTION_APPLY_RADIO  = "com.harvest.rns.action.APPLY_RADIO"
+        const val EXTRA_DEVICE        = "extra_bluetooth_device"
+        const val EXTRA_RADIO_CONFIG  = "extra_radio_config"
 
-        // Singleton state accessible from ViewModels
-        private val _messageCount     = MutableStateFlow(0)
-        private val _duplicateCount   = MutableStateFlow(0)
-        private val _lastMessageTime  = MutableStateFlow<Long>(0)
-        private val _serviceStatus    = MutableStateFlow("Stopped")
+        // ── Singleton state accessible from ViewModels ────────────────────────
+        private val _messageCount    = MutableStateFlow(0)
+        private val _duplicateCount  = MutableStateFlow(0)
+        private val _lastMessageTime = MutableStateFlow<Long>(0)
+        private val _serviceStatus   = MutableStateFlow("Stopped")
+        private val _discoveredNodes = MutableStateFlow<Map<String, DiscoveredNode>>(emptyMap())
+        private val _radioConfig     = MutableStateFlow(RadioConfig())
 
-        val messageCount:    StateFlow<Int>    = _messageCount
-        val duplicateCount:  StateFlow<Int>    = _duplicateCount
-        val lastMessageTime: StateFlow<Long>   = _lastMessageTime
-        val serviceStatus:   StateFlow<String> = _serviceStatus
+        val messageCount:    StateFlow<Int>                     = _messageCount
+        val duplicateCount:  StateFlow<Int>                     = _duplicateCount
+        val lastMessageTime: StateFlow<Long>                    = _lastMessageTime
+        val serviceStatus:   StateFlow<String>                  = _serviceStatus
+        val discoveredNodes: StateFlow<Map<String, DiscoveredNode>> = _discoveredNodes
+        val radioConfig:     StateFlow<RadioConfig>             = _radioConfig
     }
 
     // ─── Binder ───────────────────────────────────────────────────────────────
@@ -57,7 +67,6 @@ class RNSReceiverService : Service() {
     }
 
     private val binder = LocalBinder()
-
     override fun onBind(intent: Intent?): IBinder = binder
 
     // ─── Service Members ──────────────────────────────────────────────────────
@@ -65,7 +74,6 @@ class RNSReceiverService : Service() {
     private lateinit var btManager: BluetoothRNodeManager
     private lateinit var repository: HarvestRepository
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
     private var frameProcessorJob: Job? = null
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -95,14 +103,18 @@ class RNSReceiverService : Service() {
                     @Suppress("DEPRECATION")
                     intent.getParcelableExtra(EXTRA_DEVICE)
                 }
-                device?.let {
-                    btManager.connect(it)
-                    Log.i(TAG, "Connect requested for ${it.address}")
-                }
+                device?.let { btManager.connect(it) }
             }
-            ACTION_DISCONNECT -> {
-                btManager.disconnect()
-                Log.i(TAG, "Disconnect requested")
+            ACTION_DISCONNECT -> btManager.disconnect()
+
+            ACTION_APPLY_RADIO -> {
+                val freq   = intent.getLongExtra("freq", _radioConfig.value.frequencyHz)
+                val bw     = intent.getIntExtra("bw",   _radioConfig.value.bandwidthHz)
+                val sf     = intent.getIntExtra("sf",   _radioConfig.value.spreadingFactor)
+                val cr     = intent.getIntExtra("cr",   _radioConfig.value.codingRate)
+                val txpwr  = intent.getIntExtra("txpwr",_radioConfig.value.txPower)
+                val config = RadioConfig(freq, bw, sf, cr, txpwr)
+                applyRadioConfig(config)
             }
         }
         return START_STICKY
@@ -114,7 +126,6 @@ class RNSReceiverService : Service() {
         frameProcessorJob?.cancel()
         serviceScope.cancel()
         _serviceStatus.value = "Stopped"
-        Log.i(TAG, "Service destroyed")
     }
 
     // ─── Frame Processing Pipeline ────────────────────────────────────────────
@@ -129,37 +140,19 @@ class RNSReceiverService : Service() {
 
     private suspend fun processFrame(frameBytes: ByteArray) {
         try {
-            // Layer 1: Decode RNS packet
             val rnsPacket = RnsFrameDecoder.decode(frameBytes)
 
             if (rnsPacket == null) {
-                Log.d(TAG, "Could not decode RNS frame (${frameBytes.size}b) — trying raw LXMF")
                 processRawData(frameBytes)
                 return
             }
 
-            Log.v(TAG, "RNS packet: type=${rnsPacket.packetType} ctx=${rnsPacket.context} data=${rnsPacket.data.size}b")
+            Log.v(TAG, "RNS packet: type=${rnsPacket.packetType} hops=${rnsPacket.hops} data=${rnsPacket.data.size}b")
 
-            // Only process DATA packets
-            if (rnsPacket.packetType != RnsFrameDecoder.PACKET_TYPE_DATA) {
-                Log.v(TAG, "Skipping non-data packet type=${rnsPacket.packetType}")
-                return
-            }
-
-            // Layer 2: Parse LXMF message from packet data
-            val lxmfMsg = LxmfMessageParser.parse(rnsPacket.data)
-
-            if (lxmfMsg == null) {
-                Log.d(TAG, "Not an LXMF message — trying as raw CSV")
-                processRawData(rnsPacket.data)
-                return
-            }
-
-            Log.i(TAG, "LXMF message from ${lxmfMsg.sourceHashHex}: '${lxmfMsg.title}'")
-
-            // Layer 3: Parse CSV content
-            if (lxmfMsg.content.isNotBlank()) {
-                processCsvContent(lxmfMsg.content)
+            when (rnsPacket.packetType) {
+                RnsFrameDecoder.PACKET_TYPE_ANNOUNCE -> processAnnounce(rnsPacket)
+                RnsFrameDecoder.PACKET_TYPE_DATA     -> processDataPacket(rnsPacket)
+                else -> { /* LINK_REQUEST, PROOF — ignore */ }
             }
 
         } catch (e: Exception) {
@@ -167,9 +160,52 @@ class RNSReceiverService : Service() {
         }
     }
 
-    /**
-     * Fallback: treat raw bytes as UTF-8 CSV (for simple senders that omit RNS/LXMF wrapping).
-     */
+    // ─── ANNOUNCE handling ────────────────────────────────────────────────────
+
+    private fun processAnnounce(rnsPacket: RnsFrameDecoder.RnsPacket) {
+        val hashHex = rnsPacket.destinationHash.joinToString("") { "%02x".format(it) }
+
+        val node = RnsAnnounceParser.parse(
+            destinationHash = hashHex,
+            announceData    = rnsPacket.data,
+            hops            = rnsPacket.hops
+        ) ?: return
+
+        // Merge into discovered nodes map (update lastSeen / count if already known)
+        val current = _discoveredNodes.value.toMutableMap()
+        val existing = current[hashHex]
+        current[hashHex] = if (existing != null) {
+            existing.copy(
+                lastSeen      = System.currentTimeMillis(),
+                hops          = rnsPacket.hops,
+                announceCount = existing.announceCount + 1,
+                displayName   = node.displayName ?: existing.displayName,
+                aspect        = node.aspect ?: existing.aspect
+            )
+        } else {
+            node
+        }
+        _discoveredNodes.value = current
+
+        Log.i(TAG, "Node discovered: ${node.label} @ $hashHex (${rnsPacket.hops} hops)")
+    }
+
+    // ─── DATA packet handling ─────────────────────────────────────────────────
+
+    private suspend fun processDataPacket(rnsPacket: RnsFrameDecoder.RnsPacket) {
+        val lxmfMsg = LxmfMessageParser.parse(rnsPacket.data)
+
+        if (lxmfMsg == null) {
+            processRawData(rnsPacket.data)
+            return
+        }
+
+        Log.i(TAG, "LXMF from ${lxmfMsg.sourceHashHex}: '${lxmfMsg.title}'")
+        if (lxmfMsg.content.isNotBlank()) {
+            processCsvContent(lxmfMsg.content)
+        }
+    }
+
     private suspend fun processRawData(data: ByteArray) {
         val text = String(data, Charsets.UTF_8).trim()
         if (text.isNotBlank() && !text.all { it.code < 32 && it != '\n' && it != '\r' }) {
@@ -179,35 +215,43 @@ class RNSReceiverService : Service() {
 
     private suspend fun processCsvContent(csvText: String) {
         val records = CsvParser.parsePayload(csvText)
+        if (records.isEmpty()) return
 
-        if (records.isEmpty()) {
-            Log.d(TAG, "No parseable records in content:\n$csvText")
-            return
-        }
-
-        Log.i(TAG, "Parsed ${records.size} record(s) from message")
         var newCount = 0
-
         for (record in records) {
-            when (val result = repository.insertRecord(record)) {
+            when (repository.insertRecord(record)) {
                 is HarvestRepository.InsertResult.Success -> {
                     newCount++
                     _messageCount.value++
                     _lastMessageTime.value = System.currentTimeMillis()
-                    Log.i(TAG, "Stored new record: ${record.externalId} from ${record.harvesterId}")
                 }
-                is HarvestRepository.InsertResult.Duplicate -> {
-                    _duplicateCount.value++
-                    Log.d(TAG, "Duplicate ignored: ${record.externalId}")
-                }
-                is HarvestRepository.InsertResult.Error -> {
-                    Log.e(TAG, "Store error: ${result.reason}")
-                }
+                is HarvestRepository.InsertResult.Duplicate -> _duplicateCount.value++
+                is HarvestRepository.InsertResult.Error     -> {}
             }
         }
 
         if (newCount > 0) {
             updateNotification("Received $newCount new report(s) — Total: ${_messageCount.value}")
+        }
+    }
+
+    // ─── Radio Configuration ──────────────────────────────────────────────────
+
+    fun applyRadioConfig(config: RadioConfig) {
+        serviceScope.launch {
+            try {
+                Log.i(TAG, "Applying radio config: ${config.frequencyMHz()} BW=${config.bandwidthKHz()} SF=${config.spreadingFactor}")
+                val frames = config.buildAllFrames()
+                for (frame in frames) {
+                    btManager.sendRawFrame(frame)
+                    delay(50) // small gap between config commands
+                }
+                _radioConfig.value = config
+                Log.i(TAG, "Radio config applied")
+                updateNotification("Radio configured: ${config.frequencyMHz()} SF${config.spreadingFactor}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Radio config failed: ${e.message}")
+            }
         }
     }
 
@@ -234,25 +278,20 @@ class RNSReceiverService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                "RNS Harvest Receiver",
-                NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "RNS Harvest Receiver", NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Background service receiving harvest data via RNS/LXMF"
                 setShowBadge(false)
             }
-            getSystemService(NotificationManager::class.java)
-                .createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(text: String): Notification {
-        val intent = Intent(this, MainActivity::class.java)
         val pi = PendingIntent.getActivity(
-            this, 0, intent,
+            this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("RNS Harvest Receiver")
             .setContentText(text)
@@ -264,15 +303,14 @@ class RNSReceiverService : Service() {
     }
 
     private fun updateNotification(text: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIFICATION_ID, buildNotification(text))
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, buildNotification(text))
     }
 
-    // ─── Public Accessors for Binding ─────────────────────────────────────────
+    // ─── Public API (via binder) ──────────────────────────────────────────────
 
     fun getBluetoothState() = btManager.state
-
     fun connectToDevice(device: BluetoothDevice) = btManager.connect(device)
-
     fun disconnectDevice() = btManager.disconnect()
+    fun clearDiscoveredNodes() { _discoveredNodes.value = emptyMap() }
 }
