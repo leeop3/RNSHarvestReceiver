@@ -52,7 +52,7 @@ class RNSReceiverService : Service() {
         val duplicateCount:  StateFlow<Int>                        = _duplicateCount
         val lastMessageTime: StateFlow<Long>                       = _lastMessageTime
         val serviceStatus:   StateFlow<String>                     = _serviceStatus
-        val discoveredNodes: StateFlow<Map<String, DiscoveredNode>>= _discoveredNodes
+        val discoveredNodes: StateFlow<Map<String, DiscoveredNode>> = _discoveredNodes
         val radioConfig:     StateFlow<RadioConfig>                = _radioConfig
         val ownAddress:      StateFlow<String>                     = _ownAddress
         val rawFrameLog:     SharedFlow<String>                    = _rawFrameLog
