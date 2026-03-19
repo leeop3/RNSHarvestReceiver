@@ -120,31 +120,39 @@ class RNSReceiverService : Service() {
     // ─── Own address ──────────────────────────────────────────────────────────
 
     /**
-     * Generate (or restore) a persistent RNS-style identity hash for this receiver app.
+     * Generate (or restore) a persistent RNS destination address for this receiver.
      *
-     * In a full RNS stack the identity is an Ed25519 keypair and the address is
-     * a truncated SHA-256 of the public key. Here we generate a stable random UUID
-     * and derive a 10-byte (20 hex char) hash from it — the same format RNS uses
-     * for destination addresses on the wire.
+     * RNS identity/destination addresses as displayed in Sideband, rnsh, and RNode
+     * tools are 32 hex characters (16 bytes). This is the full truncated hash of
+     * the identity public key: SHA-256(public_key)[0:16].
      *
-     * This address is shown to the user so field harvesters can configure it as
-     * their LXMF delivery destination. It persists across app restarts.
+     * Since we don't have a full Ed25519 keypair here, we derive the address from
+     * a stable random seed using the same 16-byte truncated SHA-256 approach, which
+     * produces an address in exactly the format RNS users expect to enter into their
+     * LXMF destination configuration.
+     *
+     * The address is generated once, persisted, and never changes across app restarts.
+     * Delete app data to regenerate.
      */
     private fun generateOwnAddress() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val stored = prefs.getString(PREF_IDENTITY, null)
-        if (stored != null) {
+
+        // Migrate old 20-char address to 32-char format
+        if (stored != null && stored.length == 32) {
             _ownAddress.value = stored
             Log.i(TAG, "Own address (restored): $stored")
             return
         }
 
-        // First run — generate a stable identity
-        val uuid  = UUID.randomUUID().toString()
-        val digest = MessageDigest.getInstance("SHA-256")
-        val hash   = digest.digest(uuid.toByteArray())
-        // Take first 10 bytes (80 bits) — same truncation as RNS
-        val address = hash.take(10).joinToString("") { "%02x".format(it) }
+        // Generate a new stable 32-char (16-byte) identity address
+        // Use two rounds of SHA-256 to mix entropy from UUID + app package
+        val seed   = UUID.randomUUID().toString() + packageName
+        val round1 = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray())
+        val round2 = MessageDigest.getInstance("SHA-256").digest(round1)
+
+        // Take first 16 bytes → 32 hex chars (matches RNS address display format)
+        val address = round2.take(16).joinToString("") { "%02x".format(it) }
 
         prefs.edit().putString(PREF_IDENTITY, address).apply()
         _ownAddress.value = address

@@ -40,7 +40,7 @@
                 android:layout_weight="1"
                 android:text="generating…"
                 android:textColor="@color/accent_green"
-                android:textSize="18sp"
+                android:textSize="13sp"
                 android:textStyle="bold"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.05" />
