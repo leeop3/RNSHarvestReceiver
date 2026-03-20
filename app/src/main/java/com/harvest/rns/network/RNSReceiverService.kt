@@ -218,8 +218,7 @@ class RNSReceiverService : Service() {
 
             // Detect a self-contained compact row: has commas, no newline, starts with a letter
             // e.g. "ali,24d,177,3,2026-03-20 21:23:25" — clear any stale buffer first
-            val isSelfContained = !chunk.contains('
-') && chunk.firstOrNull()?.isLetter() == true
+            val isSelfContained = !chunk.contains('\n') && chunk.firstOrNull()?.isLetter() == true
             if (isSelfContained || (csvBuffer.isNotEmpty() && now - csvBufferLastAppend > 5_000L)) {
                 if (csvBuffer.isNotEmpty()) {
                     Log.d(TAG, "Clearing stale buffer before new CSV")
