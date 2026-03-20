@@ -16,7 +16,7 @@ import android.util.Log
  *   [0xC0] FEND
  *   [0x25] CMD_INTERFACES
  *   [iface_id] 1 byte interface index (0x00 for LoRa)
- *   [rns_packet...] KISS-escaped RNS packet bytes
+ *   [rns_bytes]    KISS-escaped RNS packet bytes (variable length)
  *   [0xC0] FEND
  *
  * RNS Packet Header (2 bytes):
