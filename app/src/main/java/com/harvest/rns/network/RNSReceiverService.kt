@@ -211,31 +211,36 @@ class RNSReceiverService : Service() {
     private suspend fun processDataPacket(pkt: RnsFrameDecoder.RnsPacket) {
         Log.d(TAG, "processDataPacket: ${pkt.data.size}b payload")
 
-        // Strategy 1: raw CSV path — reassemble fragments then parse
-        // The full CSV (197b) is split across multiple ~56b RNS packets.
-        // Buffer all plaintext fragments; flush when we have a complete record
-        // (i.e. a line with real data values, not just the header).
+        // Strategy 1: raw CSV path
         if (looksLikeCsv(pkt.data)) {
             val chunk = String(pkt.data, Charsets.UTF_8)
-            csvBuffer.append(chunk)
-            csvBufferLastAppend = System.currentTimeMillis()
-            Log.d(TAG, "CSV fragment buffered: ${pkt.data.size}b, total=${csvBuffer.length}b")
+            val now   = System.currentTimeMillis()
 
-            // Try parsing the accumulated buffer
+            // Detect a self-contained compact row: has commas, no newline, starts with a letter
+            // e.g. "ali,24d,177,3,2026-03-20 21:23:25" — clear any stale buffer first
+            val isSelfContained = !chunk.contains('
+') && chunk.firstOrNull()?.isLetter() == true
+            if (isSelfContained || (csvBuffer.isNotEmpty() && now - csvBufferLastAppend > 5_000L)) {
+                if (csvBuffer.isNotEmpty()) {
+                    Log.d(TAG, "Clearing stale buffer before new CSV")
+                    csvBuffer.clear()
+                }
+            }
+
+            csvBuffer.append(chunk)
+            csvBufferLastAppend = now
+            Log.d(TAG, "CSV fragment: ${pkt.data.size}b, buffer=${csvBuffer.length}b")
+
             if (tryRawCsv(csvBuffer.toString().toByteArray(Charsets.UTF_8))) {
-                Log.i(TAG, "CSV assembled from fragments (${csvBuffer.length}b)")
+                Log.i(TAG, "CSV parsed (${csvBuffer.length}b)")
                 csvBuffer.clear()
                 return
             }
-            // Not complete yet — keep buffering
-            // Auto-clear buffer if nothing arrives for 10 seconds
             return
         }
 
-        // Clear stale CSV buffer if we get a non-CSV packet
-        if (csvBuffer.isNotEmpty() &&
-            System.currentTimeMillis() - csvBufferLastAppend > 10_000L) {
-            Log.d(TAG, "CSV buffer timed out, clearing")
+        // Non-CSV packet — clear stale buffer
+        if (csvBuffer.isNotEmpty()) {
             csvBuffer.clear()
         }
 
