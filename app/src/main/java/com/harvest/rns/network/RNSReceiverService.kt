@@ -134,10 +134,11 @@ class RNSReceiverService : Service() {
 
     private suspend fun processFrame(raw: ByteArray) {
         try {
-            // Skip frames that are too short to be RNS (heartbeats, status frames)
-            if (raw.size < 2) {
-                val cmdByte = if (raw.isNotEmpty()) "cmd=0x${(raw[0].toInt() and 0xFF).toString(16)}" else "empty"
-                _rawFrameLog.emit("[$cmdByte heartbeat/status]")
+            // Skip frames too short for RNS (heartbeats, telemetry, status)
+            // 10-byte cmd=0x25 frames are RNode radio telemetry (RSSI/SNR/freq), not RNS packets
+            if (raw.size < 12) {
+                val hexPreview = raw.take(10).joinToString("") { "%02x".format(it) }
+                _rawFrameLog.emit("[status ${raw.size}b: $hexPreview]")
                 return
             }
 
