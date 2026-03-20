@@ -95,8 +95,27 @@ object CsvParser {
                     rawCsv       = line
                 )
 
+                // 5-field: id,harvester,block,ripe,empty
+                fields.size == 5 -> {
+                    val harv = fields[1].trim()
+                    val blk  = fields[2].trim()
+                    HarvestRecord(
+                        externalId   = fields[0].trim().ifEmpty { generateId(harv, blk) },
+                        harvesterId  = harv,
+                        blockId      = blk,
+                        ripeBunches  = fields[3].trim().toIntOrNull() ?: 0,
+                        emptyBunches = fields[4].trim().toIntOrNull() ?: 0,
+                        latitude     = 0.0,
+                        longitude    = 0.0,
+                        timestamp    = nowTimestamp(),
+                        reportDate   = todayDate(),
+                        photoFile    = "",
+                        rawCsv       = line
+                    )
+                }
+
                 // Minimum 4-field: harvester,block,ripe,empty
-                fields.size == 4 || fields.size == 5 -> {
+                fields.size == 4 -> {
                     val harv = fields[0].trim()
                     val blk  = fields[1].trim()
                     HarvestRecord(

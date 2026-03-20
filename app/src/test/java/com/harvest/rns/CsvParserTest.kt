@@ -65,12 +65,13 @@ class CsvParserTest {
     fun `parse 5-field CSV with id prefix`() {
         val line = "REC-003,HRV-01,BLK-A1,24,3"
         val record = CsvParser.parseLine(line)
-        // 5 fields treated as: id, harvester, block, ripe, empty
+        // 5 fields: id,harvester,block,ripe,empty
         assertNotNull(record)
-        assertEquals("HRV-01", record!!.harvesterId)
-        assertEquals("BLK-A1", record.blockId)
-        assertEquals(24,        record.ripeBunches)
-        assertEquals(3,         record.emptyBunches)
+        assertEquals("REC-003", record!!.externalId)
+        assertEquals("HRV-01",  record.harvesterId)
+        assertEquals("BLK-A1",  record.blockId)
+        assertEquals(24,         record.ripeBunches)
+        assertEquals(3,          record.emptyBunches)
     }
 
     @Test
