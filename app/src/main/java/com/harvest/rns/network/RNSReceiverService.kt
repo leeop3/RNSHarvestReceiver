@@ -169,15 +169,23 @@ class RNSReceiverService : Service() {
 
     private suspend fun processFrame(raw: ByteArray) {
         try {
-            // Emit to raw log
-            val hexPreview = raw.take(20).joinToString("") { "%02x".format(it) }
-            _rawFrameLog.emit("${raw.size}b: $hexPreview${if (raw.size > 20) "…" else ""}")
-            Log.d(TAG, "Frame ${raw.size}b: $hexPreview")
+            // Skip frames that are too short to be RNS (heartbeats, status frames)
+            if (raw.size < 2) {
+                val cmdByte = if (raw.isNotEmpty()) "cmd=0x${(raw[0].toInt() and 0xFF).toString(16)}" else "empty"
+                _rawFrameLog.emit("[$cmdByte heartbeat/status]")
+                return
+            }
+
+            // Emit to raw log with full hex
+            val hexPreview = raw.take(24).joinToString("") { "%02x".format(it) }
+            val entry = "${raw.size}b: $hexPreview${if (raw.size > 24) "…" else ""}"
+            _rawFrameLog.emit(entry)
+            Log.d(TAG, "Frame $entry")
 
             val pkt = RnsFrameDecoder.decode(raw)
 
             if (pkt == null) {
-                Log.d(TAG, "RNS decode failed — trying as raw CSV")
+                Log.d(TAG, "RNS decode failed (${raw.size}b) — trying as raw CSV")
                 tryRawCsv(raw)
                 return
             }

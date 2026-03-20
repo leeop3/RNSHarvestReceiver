@@ -145,19 +145,31 @@ object RnsFrameDecoder {
          * For cmd=0x25, strips the leading interface-id byte to expose the raw RNS packet.
          * Returns only frames that carry RNS data (0x00 and 0x25), skipping heartbeats.
          */
-        fun extractFrames(buffer: ByteArray): List<ByteArray> {
-            val frames = mutableListOf<ByteArray>()
+        /**
+         * Decoded KISS frame — includes the original cmd byte for diagnostics.
+         */
+        data class RawFrame(
+            val cmd: Int,           // KISS command byte (0x00, 0x25, 0x27, etc.)
+            val payload: ByteArray, // RNS bytes (iface byte already stripped for 0x25)
+            val rawHex: String      // first 16 bytes as hex for the debug log
+        )
+
+        /**
+         * Extract all KISS frames and return them with metadata.
+         * The debug log in NodesFragment shows ALL frames, not just RNS data frames.
+         */
+        fun extractRawFrames(buffer: ByteArray): List<RawFrame> {
+            val frames = mutableListOf<RawFrame>()
             var i = 0
 
             while (i < buffer.size) {
-                // Seek to FEND
                 if (buffer[i] != FEND) { i++; continue }
                 i++
                 if (i >= buffer.size) break
 
                 val cmd = buffer[i++]
+                val cmdInt = cmd.toInt() and 0xFF
 
-                // Unescape frame body
                 val frameData = mutableListOf<Byte>()
                 while (i < buffer.size && buffer[i] != FEND) {
                     val b = buffer[i++]
@@ -172,40 +184,48 @@ object RnsFrameDecoder {
                         else -> frameData.add(b)
                     }
                 }
-                if (i < buffer.size) i++  // skip closing FEND
-
+                if (i < buffer.size) i++
                 if (frameData.isEmpty()) continue
 
-                val cmdInt = cmd.toInt() and 0xFF
-                Log.d("KissFramer", "KISS frame: cmd=0x${cmd.toString(16).padStart(2,'0')} len=${frameData.size}")
+                val hex = frameData.take(16).joinToString("") { "%02x".format(it) }
+                Log.d("KissFramer", "cmd=0x${cmdInt.toString(16).padStart(2,'0')} total=${frameData.size}b: $hex")
 
                 when (cmd) {
                     CMD_DATA -> {
-                        // Standard KISS — payload is the RNS packet directly
-                        frames.add(frameData.toByteArray())
+                        val bytes = frameData.toByteArray()
+                        frames.add(RawFrame(cmdInt, bytes, hex))
                     }
                     CMD_INTERFACES -> {
-                        // RNode interface frame — first byte is interface ID, rest is RNS packet
                         if (frameData.size > 1) {
                             val ifaceId = frameData[0].toInt() and 0xFF
                             val rnsBytes = frameData.drop(1).toByteArray()
-                            Log.d("KissFramer", "CMD_INTERFACES iface=$ifaceId rns=${rnsBytes.size}b")
-                            frames.add(rnsBytes)
+                            val rnsHex = rnsBytes.take(16).joinToString("") { "%02x".format(it) }
+                            Log.d("KissFramer", "  └─ iface=$ifaceId rns=${rnsBytes.size}b: $rnsHex")
+                            frames.add(RawFrame(cmdInt, rnsBytes, "iface=$ifaceId $rnsHex"))
+                        } else {
+                            // 0x25 with only 1 byte (just iface id, no payload) — log but skip
+                            frames.add(RawFrame(cmdInt, ByteArray(0), "iface-only, no rns payload"))
                         }
                     }
                     CMD_READY -> {
-                        // Heartbeat — ignore
-                        Log.v("KissFramer", "CMD_READY heartbeat")
+                        // Heartbeat — still report it in log but no payload to process
+                        frames.add(RawFrame(cmdInt, ByteArray(0), "heartbeat"))
                     }
                     else -> {
-                        // Other commands (stats, config responses) — ignore for now
-                        Log.v("KissFramer", "Ignoring KISS cmd=0x${cmdInt.toString(16)} len=${frameData.size}")
+                        // Stats, config ACKs etc — report in log
+                        frames.add(RawFrame(cmdInt, ByteArray(0), "cmd=0x${cmdInt.toString(16)} ${frameData.size}b"))
                     }
                 }
             }
-
             return frames
         }
+
+        /** Legacy wrapper — returns only processable RNS payloads */
+        fun extractFrames(buffer: ByteArray): List<ByteArray> =
+            extractRawFrames(buffer)
+                .filter { it.payload.isNotEmpty() && it.cmd != (CMD_READY.toInt() and 0xFF) }
+                .filter { it.cmd == (CMD_DATA.toInt() and 0xFF) || it.cmd == (CMD_INTERFACES.toInt() and 0xFF) }
+                .map { it.payload }
 
         fun encodeFrame(data: ByteArray): ByteArray {
             val out = mutableListOf(FEND, CMD_DATA)

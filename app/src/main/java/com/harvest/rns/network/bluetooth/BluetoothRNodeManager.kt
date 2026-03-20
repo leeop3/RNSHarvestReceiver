@@ -184,9 +184,9 @@ class BluetoothRNodeManager(private val context: Context) {
 
                     // Extract complete KISS frames
                     val accArray = accumulator.toByteArray()
-                    val frames = RnsFrameDecoder.KissFramer.extractFrames(accArray)
+                    val rawFrames = RnsFrameDecoder.KissFramer.extractRawFrames(accArray)
 
-                    if (frames.isNotEmpty()) {
+                    if (rawFrames.isNotEmpty()) {
                         // Remove consumed bytes: find last FEND position
                         val lastFend = accArray.indexOfLast { it == RnsFrameDecoder.KissFramer.FEND }
                         if (lastFend >= 0) {
@@ -195,10 +195,22 @@ class BluetoothRNodeManager(private val context: Context) {
                             accumulator.addAll(remaining.toList())
                         }
 
-                        // Emit each frame
-                        for (frame in frames) {
-                            Log.v(TAG, "Emitting frame: ${frame.size} bytes")
-                            _incomingFrames.emit(frame)
+                        // Emit each frame that has a processable payload
+                        val cmd_data     = RnsFrameDecoder.KissFramer.CMD_DATA.toInt() and 0xFF
+                        val cmd_ifaces   = RnsFrameDecoder.KissFramer.CMD_INTERFACES.toInt() and 0xFF
+                        val cmd_ready    = RnsFrameDecoder.KissFramer.CMD_READY.toInt() and 0xFF
+                        for (rf in rawFrames) {
+                            // Emit ALL frames to service for logging, even if payload is empty
+                            // Service will filter based on payload content
+                            _incomingFrames.emit(
+                                rf.payload.ifEmpty {
+                                    // For heartbeat/status frames, emit a 1-byte sentinel
+                                    // so the service can log them in the UI
+                                    byteArrayOf(rf.cmd.toByte())
+                                }.also {
+                                    Log.v(TAG, "Frame cmd=0x${rf.cmd.toString(16)} ${rf.payload.size}b: ${rf.rawHex}")
+                                }
+                            )
                         }
                     }
 
