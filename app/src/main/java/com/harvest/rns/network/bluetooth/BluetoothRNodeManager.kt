@@ -200,17 +200,11 @@ class BluetoothRNodeManager(private val context: Context) {
                         val cmd_ifaces   = RnsFrameDecoder.KissFramer.CMD_INTERFACES.toInt() and 0xFF
                         val cmd_ready    = RnsFrameDecoder.KissFramer.CMD_READY.toInt() and 0xFF
                         for (rf in rawFrames) {
-                            // Emit ALL frames to service for logging, even if payload is empty
-                            // Service will filter based on payload content
-                            _incomingFrames.emit(
-                                rf.payload.ifEmpty {
-                                    // For heartbeat/status frames, emit a 1-byte sentinel
-                                    // so the service can log them in the UI
-                                    byteArrayOf(rf.cmd.toByte())
-                                }.also {
-                                    Log.v(TAG, "Frame cmd=0x${rf.cmd.toString(16)} ${rf.payload.size}b: ${rf.rawHex}")
-                                }
-                            )
+                            Log.v(TAG, "Frame cmd=0x${rf.cmd.toString(16)} ${rf.payload.size}b: ${rf.rawHex}")
+                            // Only emit frames that have actual payload bytes
+                            val toEmit = if (rf.payload.isNotEmpty()) rf.payload
+                                         else byteArrayOf(rf.cmd.toByte())
+                            _incomingFrames.emit(toEmit)
                         }
                     }
 
