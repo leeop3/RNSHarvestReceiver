@@ -395,11 +395,13 @@ class RNSReceiverService : Service() {
 
                 val packet = concat(byteArrayOf(header0, header1), hashBytes, announceData)
 
-                // Wrap in KISS frame and send
-                val kissFrame = RnsFrameDecoder.KissFramer.encodeFrame(packet)
+                // Wrap in CMD_INTERFACES KISS frame (0x25) — the RNode
+                // requires this format to actually transmit the packet over LoRa.
+                // Standard CMD_DATA (0x00) only works for direct serial comms.
+                val kissFrame = RnsFrameDecoder.KissFramer.encodeInterfaceFrame(packet)
                 btManager.sendRawFrame(kissFrame)
 
-                Log.i(TAG, "Self-announce sent (${addr.take(8)}…)")
+                Log.i(TAG, "Self-announce sent via CMD_INTERFACES (${addr.take(8)}…)")
             } catch (e: Exception) {
                 Log.e(TAG, "Announce error: ${e.message}")
             }

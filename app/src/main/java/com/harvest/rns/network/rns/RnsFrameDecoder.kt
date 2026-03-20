@@ -5,39 +5,44 @@ import android.util.Log
 /**
  * RNS (Reticulum Network Stack) frame decoder.
  *
+ * RNode KISS command bytes:
+ *   0x00 = CMD_DATA       — standard KISS data (legacy / simple senders)
+ *   0x25 = CMD_INTERFACES — RNS interface data (modern RNode firmware, THIS IS THE DATA)
+ *   0x27 = CMD_READY      — RNode heartbeat / ready signal (ignore)
+ *   0x21-0x24             — Stats frames (RSSI, SNR etc, ignore)
+ *
+ * When RNode operates as an RNS interface (the normal mode), it wraps
+ * incoming RNS packets as:
+ *   [0xC0] FEND
+ *   [0x25] CMD_INTERFACES
+ *   [iface_id] 1 byte interface index (0x00 for LoRa)
+ *   [rns_packet...] KISS-escaped RNS packet bytes
+ *   [0xC0] FEND
+ *
  * RNS Packet Header (2 bytes):
+ *   Byte 0: bits[7:6]=header_type  bits[5:4]=propagation
+ *           bits[3:2]=destination  bits[1:0]=packet_type
+ *   Byte 1: hops (8 bits)
  *
- *   Byte 1:  [IFAC_FLAG | HEADER_TYPE | PROPAGATION_TYPE(2) | DESTINATION_TYPE(2) | PACKET_TYPE(2)]
- *   Byte 2:  [HOPS(8)]
+ * packet_type: 0=DATA  1=ANNOUNCE  2=LINK_REQUEST  3=PROOF
  *
- * Actual bit layout from the Reticulum source (RNS/Packet.py):
- *   bits 7-6: header_type   (0 = 1 address, 1 = 2 addresses)
- *   bits 5-4: propagation   (0 = broadcast, 1 = transport, 2 = relay, 3 = tunnel)
- *   bits 3-2: destination   (0 = single, 1 = group, 2 = plain, 3 = link)
- *   bits 1-0: packet_type   (0 = data, 1 = announce, 2 = link_request, 3 = proof)
- *
- *   NOTE: The IFAC bit is bit 7 of byte 0 when IFAC is in use, shifting everything.
- *   For standard (non-IFAC) interfaces: byte 0 = flags/type, byte 1 = hops.
- *
- * Reference: https://github.com/markqvist/Reticulum/blob/master/RNS/Packet.py
+ * Reference: https://github.com/markqvist/RNode_Firmware
+ *            https://github.com/markqvist/Reticulum/blob/master/RNS/Packet.py
  */
 object RnsFrameDecoder {
 
     private const val TAG = "RnsFrameDecoder"
 
-    // Packet type constants (bits 1:0 of header byte 0)
     const val PACKET_TYPE_DATA         = 0x00
     const val PACKET_TYPE_ANNOUNCE     = 0x01
     const val PACKET_TYPE_LINK_REQUEST = 0x02
     const val PACKET_TYPE_PROOF        = 0x03
 
-    // Header type (bit 6 of header byte 0)
-    const val HEADER_TYPE_1 = 0  // single address field
-    const val HEADER_TYPE_2 = 1  // two address fields
+    const val HEADER_TYPE_1 = 0  // single address
+    const val HEADER_TYPE_2 = 1  // two addresses
 
-    // Address sizes
-    const val TRUNCATED_HASH_SIZE = 10  // RNS uses 10-byte truncated hashes on wire
-    const val FULL_HASH_SIZE      = 32
+    const val TRUNCATED_HASH_SIZE = 10  // 10-byte dest hash on wire
+    const val FULL_HASH_SIZE      = 16  // 16-byte display address
 
     data class RnsPacket(
         val packetType:      Int,
@@ -51,62 +56,46 @@ object RnsFrameDecoder {
         val ifacFlag:        Boolean
     )
 
-    /**
-     * Decode an RNS packet from raw KISS-unescaped bytes.
-     *
-     * We log the raw hex of every incoming frame at DEBUG level so that
-     * if packet type detection is wrong, the logs show exactly what arrived.
-     */
     fun decode(raw: ByteArray): RnsPacket? {
         if (raw.size < 2 + TRUNCATED_HASH_SIZE) {
-            Log.d(TAG, "Frame too short (${raw.size}b): ${raw.toHex()}")
+            Log.d(TAG, "Frame too short (${raw.size}b)")
             return null
         }
 
-        // Log full raw bytes for debugging announce issues
-        Log.d(TAG, "RAW frame (${raw.size}b): ${raw.take(32).toByteArray().toHex()}${if (raw.size > 32) "…" else ""}")
+        val hex = raw.take(32).joinToString("") { "%02x".format(it) }
+        Log.d(TAG, "RAW ${raw.size}b: $hex${if (raw.size > 32) "…" else ""}")
 
         return try {
             var offset = 0
-
             val h0 = raw[offset++].toInt() and 0xFF
             val h1 = raw[offset++].toInt() and 0xFF
 
-            // Check for IFAC flag (bit 7 of h0) — interface access code present
             val ifacFlag = (h0 ushr 7) and 0x01 == 1
 
-            // Header byte after possible IFAC stripping
-            val headerByte = if (ifacFlag) {
-                // IFAC mode: h0 is the IFAC byte, h1 is the actual header
-                // and we need to read one more byte for hops
+            val headerByte: Int
+            val hops: Int
+            if (ifacFlag) {
                 if (raw.size < 3 + TRUNCATED_HASH_SIZE) return null
-                h1
+                headerByte = h1
+                hops = raw[offset++].toInt() and 0xFF
             } else {
-                h0
+                headerByte = h0
+                hops = h1
             }
 
-            val hops = if (ifacFlag) {
-                raw[offset++].toInt() and 0xFF
-            } else {
-                h1
-            }
+            val headerType      = (headerByte ushr 6) and 0x03
+            val propagationType = (headerByte ushr 4) and 0x03
+            val destinationType = (headerByte ushr 2) and 0x03
+            val packetType      = headerByte and 0x03
 
-            // Parse header fields from headerByte
-            val headerType      = (headerByte ushr 6) and 0x03  // bits 7:6
-            val propagationType = (headerByte ushr 4) and 0x03  // bits 5:4
-            val destinationType = (headerByte ushr 2) and 0x03  // bits 3:2
-            val packetType      = headerByte and 0x03            // bits 1:0
+            Log.d(TAG, "Header 0x${h0.toString(16)}/0x${h1.toString(16)}: " +
+                "ifac=$ifacFlag hdrType=$headerType prop=$propagationType " +
+                "dstType=$destinationType pktType=$packetType hops=$hops")
 
-            Log.d(TAG, "Header: h0=0x${h0.toString(16)} h1=0x${h1.toString(16)} " +
-                    "ifac=$ifacFlag hdrType=$headerType prop=$propagationType " +
-                    "dst=$destinationType pktType=$packetType hops=$hops")
-
-            // Destination hash (first address)
             if (offset + TRUNCATED_HASH_SIZE > raw.size) return null
             val destHash = raw.copyOfRange(offset, offset + TRUNCATED_HASH_SIZE)
             offset += TRUNCATED_HASH_SIZE
 
-            // Second address (transport ID) — present for header type 1 (2-address)
             val transportId: ByteArray? = if (headerType == HEADER_TYPE_2) {
                 if (offset + TRUNCATED_HASH_SIZE > raw.size) return null
                 val tid = raw.copyOfRange(offset, offset + TRUNCATED_HASH_SIZE)
@@ -114,23 +103,15 @@ object RnsFrameDecoder {
                 tid
             } else null
 
-            // Remaining bytes are payload
             val data = if (offset < raw.size) raw.copyOfRange(offset, raw.size)
                        else ByteArray(0)
 
-            Log.i(TAG, "Decoded: type=$packetType hops=$hops dest=${destHash.toHex()} data=${data.size}b")
+            Log.i(TAG, "Decoded RNS: type=$packetType hops=$hops " +
+                "dest=${destHash.toHex()} data=${data.size}b")
 
-            RnsPacket(
-                packetType      = packetType,
-                headerType      = headerType,
-                propagationType = propagationType,
-                destinationType = destinationType,
-                hops            = hops,
-                destinationHash = destHash,
-                transportId     = transportId,
-                data            = data,
-                ifacFlag        = ifacFlag
-            )
+            RnsPacket(packetType, headerType, propagationType, destinationType,
+                hops, destHash, transportId, data, ifacFlag)
+
         } catch (e: Exception) {
             Log.e(TAG, "Decode error: ${e.message}")
             null
@@ -138,7 +119,6 @@ object RnsFrameDecoder {
     }
 
     private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
-    private fun List<Byte>.toByteArray() = ByteArray(size) { this[it] }
 
     // ─── KISS Framer ──────────────────────────────────────────────────────────
 
@@ -147,16 +127,37 @@ object RnsFrameDecoder {
         const val FESC    = 0xDB.toByte()
         const val TFEND   = 0xDC.toByte()
         const val TFESC   = 0xDD.toByte()
-        const val CMD_DATA = 0x00.toByte()
 
+        // Command bytes
+        const val CMD_DATA       = 0x00.toByte()  // standard KISS data
+        const val CMD_INTERFACES = 0x25.toByte()  // RNS interface data (RNode firmware)
+        const val CMD_READY      = 0x27.toByte()  // RNode heartbeat
+
+        data class KissFrame(
+            val cmd: Byte,
+            val payload: ByteArray  // unescaped, interface byte stripped for 0x25
+        )
+
+        /**
+         * Extract complete KISS frames from a byte stream buffer.
+         *
+         * Handles both standard KISS (cmd=0x00) and RNode interface frames (cmd=0x25).
+         * For cmd=0x25, strips the leading interface-id byte to expose the raw RNS packet.
+         * Returns only frames that carry RNS data (0x00 and 0x25), skipping heartbeats.
+         */
         fun extractFrames(buffer: ByteArray): List<ByteArray> {
             val frames = mutableListOf<ByteArray>()
             var i = 0
+
             while (i < buffer.size) {
+                // Seek to FEND
                 if (buffer[i] != FEND) { i++; continue }
                 i++
                 if (i >= buffer.size) break
+
                 val cmd = buffer[i++]
+
+                // Unescape frame body
                 val frameData = mutableListOf<Byte>()
                 while (i < buffer.size && buffer[i] != FEND) {
                     val b = buffer[i++]
@@ -171,17 +172,43 @@ object RnsFrameDecoder {
                         else -> frameData.add(b)
                     }
                 }
-                if (i < buffer.size) i++
-                if (cmd == CMD_DATA && frameData.isNotEmpty()) {
-                    frames.add(frameData.toByteArray())
+                if (i < buffer.size) i++  // skip closing FEND
+
+                if (frameData.isEmpty()) continue
+
+                val cmdInt = cmd.toInt() and 0xFF
+                Log.d("KissFramer", "KISS frame: cmd=0x${cmd.toString(16).padStart(2,'0')} len=${frameData.size}")
+
+                when (cmd) {
+                    CMD_DATA -> {
+                        // Standard KISS — payload is the RNS packet directly
+                        frames.add(frameData.toByteArray())
+                    }
+                    CMD_INTERFACES -> {
+                        // RNode interface frame — first byte is interface ID, rest is RNS packet
+                        if (frameData.size > 1) {
+                            val ifaceId = frameData[0].toInt() and 0xFF
+                            val rnsBytes = frameData.drop(1).toByteArray()
+                            Log.d("KissFramer", "CMD_INTERFACES iface=$ifaceId rns=${rnsBytes.size}b")
+                            frames.add(rnsBytes)
+                        }
+                    }
+                    CMD_READY -> {
+                        // Heartbeat — ignore
+                        Log.v("KissFramer", "CMD_READY heartbeat")
+                    }
+                    else -> {
+                        // Other commands (stats, config responses) — ignore for now
+                        Log.v("KissFramer", "Ignoring KISS cmd=0x${cmdInt.toString(16)} len=${frameData.size}")
+                    }
                 }
             }
+
             return frames
         }
 
         fun encodeFrame(data: ByteArray): ByteArray {
-            val out = mutableListOf<Byte>()
-            out.add(FEND); out.add(CMD_DATA)
+            val out = mutableListOf(FEND, CMD_DATA)
             for (b in data) when (b) {
                 FEND -> { out.add(FESC); out.add(TFEND) }
                 FESC -> { out.add(FESC); out.add(TFESC) }
@@ -190,5 +217,22 @@ object RnsFrameDecoder {
             out.add(FEND)
             return out.toByteArray()
         }
+
+        /**
+         * Encode a frame using CMD_INTERFACES (0x25) format for sending
+         * to RNode when operating in RNS interface mode.
+         */
+        fun encodeInterfaceFrame(data: ByteArray, ifaceId: Byte = 0x00): ByteArray {
+            val out = mutableListOf(FEND, CMD_INTERFACES, ifaceId)
+            for (b in data) when (b) {
+                FEND -> { out.add(FESC); out.add(TFEND) }
+                FESC -> { out.add(FESC); out.add(TFESC) }
+                else -> out.add(b)
+            }
+            out.add(FEND)
+            return out.toByteArray()
+        }
+
+        private fun List<Byte>.toByteArray() = ByteArray(size) { this[it] }
     }
 }
