@@ -95,23 +95,50 @@ object CsvParser {
                     rawCsv       = line
                 )
 
-                // 5-field: id,harvester,block,ripe,empty
+                // 5-field: detect format by checking if field[4] looks like a timestamp
+                // Format A: harvester,block,ripe,empty,timestamp  (oilpalmharvester format)
+                // Format B: id,harvester,block,ripe,empty          (legacy format)
                 fields.size == 5 -> {
-                    val harv = fields[1].trim()
-                    val blk  = fields[2].trim()
-                    HarvestRecord(
-                        externalId   = fields[0].trim().ifEmpty { generateId(harv, blk) },
-                        harvesterId  = harv,
-                        blockId      = blk,
-                        ripeBunches  = fields[3].trim().toIntOrNull() ?: 0,
-                        emptyBunches = fields[4].trim().toIntOrNull() ?: 0,
-                        latitude     = 0.0,
-                        longitude    = 0.0,
-                        timestamp    = nowTimestamp(),
-                        reportDate   = todayDate(),
-                        photoFile    = "",
-                        rawCsv       = line
-                    )
+                    val f4 = fields[4].trim()
+                    // If last field looks like a timestamp (contains digits and : or -)
+                    // treat as: harvester, block, ripe, empty, timestamp
+                    val isTimestamp = f4.any { it == ':' || it == '-' || it == 'T' } 
+                                   && f4.any { it.isDigit() }
+                    if (isTimestamp) {
+                        // Format A: harvester,block,ripe,empty,timestamp
+                        val harv = fields[0].trim()
+                        val blk  = fields[1].trim()
+                        HarvestRecord(
+                            externalId   = generateId(harv, blk),
+                            harvesterId  = harv,
+                            blockId      = blk,
+                            ripeBunches  = fields[2].trim().toIntOrNull() ?: 0,
+                            emptyBunches = fields[3].trim().toIntOrNull() ?: 0,
+                            latitude     = 0.0,
+                            longitude    = 0.0,
+                            timestamp    = f4,
+                            reportDate   = extractDate(f4),
+                            photoFile    = "",
+                            rawCsv       = line
+                        )
+                    } else {
+                        // Format B: id,harvester,block,ripe,empty
+                        val harv = fields[1].trim()
+                        val blk  = fields[2].trim()
+                        HarvestRecord(
+                            externalId   = fields[0].trim().ifEmpty { generateId(harv, blk) },
+                            harvesterId  = harv,
+                            blockId      = blk,
+                            ripeBunches  = fields[3].trim().toIntOrNull() ?: 0,
+                            emptyBunches = fields[4].trim().toIntOrNull() ?: 0,
+                            latitude     = 0.0,
+                            longitude    = 0.0,
+                            timestamp    = nowTimestamp(),
+                            reportDate   = todayDate(),
+                            photoFile    = "",
+                            rawCsv       = line
+                        )
+                    }
                 }
 
                 // Minimum 4-field: harvester,block,ripe,empty

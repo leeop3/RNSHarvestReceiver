@@ -167,6 +167,10 @@ object RnsFrameDecoder {
                 i++
                 if (i >= buffer.size) break
 
+                // Skip consecutive FEND bytes (inter-frame padding, empty frames)
+                while (i < buffer.size && buffer[i] == FEND) { i++ }
+                if (i >= buffer.size) break
+
                 val cmd = buffer[i++]
                 val cmdInt = cmd.toInt() and 0xFF
 
