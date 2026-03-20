@@ -4,7 +4,8 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="24dp"
-    android:gravity="center">
+    android:gravity="center"
+    android:background="#FFFFFF">
 
     <TextView
         android:id="@+id/qrTitle"
@@ -13,7 +14,7 @@
         android:text="Scan to set receiver address"
         android:textSize="16sp"
         android:textStyle="bold"
-        android:textColor="?attr/colorOnSurface"
+        android:textColor="#212121"
         android:layout_marginBottom="16dp"/>
 
     <ImageView
@@ -21,7 +22,9 @@
         android:layout_width="260dp"
         android:layout_height="260dp"
         android:contentDescription="QR Code"
-        android:scaleType="fitCenter"/>
+        android:scaleType="fitCenter"
+        android:background="#FFFFFF"
+        android:padding="8dp"/>
 
     <TextView
         android:id="@+id/qrAddressText"
@@ -30,7 +33,7 @@
         android:layout_marginTop="16dp"
         android:fontFamily="monospace"
         android:textSize="11sp"
-        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textColor="#616161"
         android:gravity="center"/>
 
     <TextView
@@ -39,7 +42,7 @@
         android:layout_marginTop="8dp"
         android:text="Point the harvester phone camera at this QR code"
         android:textSize="12sp"
-        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textColor="#616161"
         android:gravity="center"/>
 
 </LinearLayout>
