@@ -70,6 +70,9 @@ class RNSReceiverService : Service() {
     private lateinit var btManager: BluetoothRNodeManager
     private lateinit var repository: HarvestRepository
     private lateinit var identity: RnsIdentity
+    // Buffer for reassembling CSV split across multiple RNS packets
+    private val csvBuffer = StringBuilder()
+    private var csvBufferLastAppend = 0L
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var frameProcessorJob: Job? = null
 
@@ -208,12 +211,32 @@ class RNSReceiverService : Service() {
     private suspend fun processDataPacket(pkt: RnsFrameDecoder.RnsPacket) {
         Log.d(TAG, "processDataPacket: ${pkt.data.size}b payload")
 
-        // Strategy 1: try raw CSV FIRST — if it starts with printable ASCII and has commas
-        // it is plaintext CSV sent directly (bypassing LXMF), try this before LXMF
-        // to avoid the compact LXMF parser stripping the first 10 bytes as a fake "src hash"
+        // Strategy 1: raw CSV path — reassemble fragments then parse
+        // The full CSV (197b) is split across multiple ~56b RNS packets.
+        // Buffer all plaintext fragments; flush when we have a complete record
+        // (i.e. a line with real data values, not just the header).
         if (looksLikeCsv(pkt.data)) {
-            Log.d(TAG, "Payload looks like raw CSV — trying directly")
-            if (tryRawCsv(pkt.data)) return
+            val chunk = String(pkt.data, Charsets.UTF_8)
+            csvBuffer.append(chunk)
+            csvBufferLastAppend = System.currentTimeMillis()
+            Log.d(TAG, "CSV fragment buffered: ${pkt.data.size}b, total=${csvBuffer.length}b")
+
+            // Try parsing the accumulated buffer
+            if (tryRawCsv(csvBuffer.toString().toByteArray(Charsets.UTF_8))) {
+                Log.i(TAG, "CSV assembled from fragments (${csvBuffer.length}b)")
+                csvBuffer.clear()
+                return
+            }
+            // Not complete yet — keep buffering
+            // Auto-clear buffer if nothing arrives for 10 seconds
+            return
+        }
+
+        // Clear stale CSV buffer if we get a non-CSV packet
+        if (csvBuffer.isNotEmpty() &&
+            System.currentTimeMillis() - csvBufferLastAppend > 10_000L) {
+            Log.d(TAG, "CSV buffer timed out, clearing")
+            csvBuffer.clear()
         }
 
         // Strategy 2: try decrypting with our identity keypair (RNS encrypted message)
