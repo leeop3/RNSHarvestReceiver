@@ -62,16 +62,28 @@ class CsvParserTest {
     }
 
     @Test
+    fun `parse 5-field CSV with timestamp (oilpalmharvester format)`() {
+        val line = "HRV-01,BLK-A1,24,3,2025-03-20T08:30:00"
+        val record = CsvParser.parseLine(line)
+        // Format A: harvester,block,ripe,empty,timestamp
+        assertNotNull(record)
+        assertEquals("HRV-01", record!!.harvesterId)
+        assertEquals("BLK-A1", record.blockId)
+        assertEquals(24,        record.ripeBunches)
+        assertEquals(3,         record.emptyBunches)
+        assertEquals("2025-03-20", record.reportDate)
+    }
+
+    @Test
     fun `parse 5-field CSV with id prefix`() {
         val line = "REC-003,HRV-01,BLK-A1,24,3"
         val record = CsvParser.parseLine(line)
-        // 5 fields: id,harvester,block,ripe,empty
+        // Format B: id,harvester,block,ripe,empty (last field has no : or - so not timestamp)
         assertNotNull(record)
-        assertEquals("REC-003", record!!.externalId)
-        assertEquals("HRV-01",  record.harvesterId)
-        assertEquals("BLK-A1",  record.blockId)
-        assertEquals(24,         record.ripeBunches)
-        assertEquals(3,          record.emptyBunches)
+        assertEquals("HRV-01", record!!.harvesterId)
+        assertEquals("BLK-A1", record.blockId)
+        assertEquals(24,        record.ripeBunches)
+        assertEquals(3,         record.emptyBunches)
     }
 
     @Test

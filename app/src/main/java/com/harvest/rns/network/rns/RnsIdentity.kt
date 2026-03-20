@@ -126,11 +126,34 @@ class RnsIdentity private constructor(
         MessageDigest.getInstance("SHA-256").digest(combined).copyOf(16)
     }
 
-    /** 32-character hex address (what users enter in their sender config) */
+    /** Raw identity hash: SHA-256(ed25519+x25519)[0:16] — internal use only */
     val addressHex: String get() = addressBytes.joinToString("") { "%02x".format(it) }
 
-    /** 10-byte truncated hash for RNS wire routing */
-    val truncatedHash: ByteArray get() = addressBytes.copyOf(10)
+    /** 10-byte truncated hash for RNS wire routing (of the LXMF delivery dest) */
+    val truncatedHash: ByteArray get() = lxmfDeliveryHash.copyOf(10)
+
+    /**
+     * LXMF delivery destination hash — THIS is what users must enter in sender config.
+     *
+     * Formula (from RNS/Destination.py):
+     *   name_hash = SHA-256("lxmf.delivery")[0:10]
+     *   dest_hash = SHA-256(name_hash + identity_hash)[0:16]
+     *
+     * This matches what RNS.Destination(identity, SINGLE, "lxmf", "delivery").hash
+     * produces on the sender side.
+     */
+    val lxmfDeliveryHash: ByteArray by lazy {
+        val nameHash = MessageDigest.getInstance("SHA-256")
+            .digest("lxmf.delivery".toByteArray(Charsets.UTF_8))
+            .copyOf(10)
+        MessageDigest.getInstance("SHA-256")
+            .also { it.update(nameHash); it.update(addressBytes) }
+            .digest()
+            .copyOf(16)
+    }
+
+    /** 32-char hex of the LXMF delivery address — show this to users */
+    val lxmfAddressHex: String get() = lxmfDeliveryHash.joinToString("") { "%02x".format(it) }
 
     /**
      * Decrypt an incoming RNS-encrypted DATA packet payload.

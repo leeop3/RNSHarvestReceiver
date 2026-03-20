@@ -80,7 +80,10 @@ class RNSReceiverService : Service() {
         btManager  = BluetoothRNodeManager(applicationContext)
         repository = HarvestRepository(HarvestDatabase.getInstance(applicationContext).harvestDao())
         identity   = RnsIdentity.loadOrCreate(applicationContext)
-        _ownAddress.value = identity.addressHex
+        // Show the LXMF delivery destination hash — this is what senders must enter
+        _ownAddress.value = identity.lxmfAddressHex
+        Log.i(TAG, "Identity hash:      ${identity.addressHex}")
+        Log.i(TAG, "LXMF delivery addr: ${identity.lxmfAddressHex}")
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Waiting for RNode…"))
         observeBluetoothState()
@@ -205,34 +208,47 @@ class RNSReceiverService : Service() {
     private suspend fun processDataPacket(pkt: RnsFrameDecoder.RnsPacket) {
         Log.d(TAG, "processDataPacket: ${pkt.data.size}b payload")
 
-        // Strategy 1: try decrypting with our identity keypair (RNS encrypted message)
+        // Strategy 1: try raw CSV FIRST — if it starts with printable ASCII and has commas
+        // it is plaintext CSV sent directly (bypassing LXMF), try this before LXMF
+        // to avoid the compact LXMF parser stripping the first 10 bytes as a fake "src hash"
+        if (looksLikeCsv(pkt.data)) {
+            Log.d(TAG, "Payload looks like raw CSV — trying directly")
+            if (tryRawCsv(pkt.data)) return
+        }
+
+        // Strategy 2: try decrypting with our identity keypair (RNS encrypted message)
         val decrypted = identity.decrypt(pkt.data)
         if (decrypted != null) {
             Log.i(TAG, "Decrypted ${pkt.data.size}b → ${decrypted.size}b")
-            // Try LXMF on decrypted content
             val lxmf = LxmfMessageParser.parse(decrypted)
             if (lxmf != null && lxmf.content.isNotBlank()) {
-                Log.i(TAG, "LXMF (decrypted) from ${lxmf.sourceHashHex}: ${lxmf.content.length} chars")
-                processCsvContent(lxmf.content)
-                return
+                processCsvContent(lxmf.content); return
             }
-            // Try raw CSV on decrypted content
             if (tryRawCsv(decrypted)) return
         }
 
-        // Strategy 2: try LXMF parse on raw payload (unencrypted / plaintext LXMF)
+        // Strategy 3: try LXMF parse (handles ratchet-encrypted and compact LXMF)
         val lxmf = LxmfMessageParser.parse(pkt.data)
         if (lxmf != null && lxmf.content.isNotBlank()) {
-            Log.i(TAG, "LXMF (plain) from ${lxmf.sourceHashHex}: '${lxmf.title}' (${lxmf.content.length} chars)")
+            Log.i(TAG, "LXMF from ${lxmf.sourceHashHex}: ${lxmf.content.length} chars")
             processCsvContent(lxmf.content)
             return
         }
 
-        // Strategy 3: try raw CSV on payload directly
-        Log.d(TAG, "LXMF parse failed — trying raw CSV on ${pkt.data.size}b")
+        // Strategy 4: last resort raw CSV on full payload
         if (tryRawCsv(pkt.data)) return
 
-        Log.d(TAG, "No parseable data in ${pkt.data.size}b packet — may need decryption key exchange")
+        Log.d(TAG, "No parseable data in ${pkt.data.size}b packet")
+    }
+
+    /** Returns true if the payload looks like a plaintext CSV (not binary/encrypted) */
+    private fun looksLikeCsv(data: ByteArray): Boolean {
+        if (data.size < 4) return false
+        // Check first 20 bytes — all must be printable ASCII
+        val check = data.take(minOf(20, data.size))
+        if (!check.all { b -> val i = b.toInt() and 0xFF; i in 32..126 || i == 10 || i == 13 }) return false
+        // Must contain at least one comma
+        return data.any { it == ','.code.toByte() }
     }
 
     /**
@@ -349,7 +365,9 @@ class RNSReceiverService : Service() {
     private fun sendSelfAnnounce() {
         serviceScope.launch {
             try {
-                val hashBytes = identity.truncatedHash  // 10-byte wire hash
+                // Use LXMF delivery destination hash (not raw identity hash)
+                // This is what RNS.Destination(identity, SINGLE, "lxmf","delivery") produces
+                val hashBytes = identity.lxmfDeliveryHash.copyOf(10)
 
                 // Build announce data with REAL Ed25519 + X25519 public keys
                 // This allows senders to encrypt messages to us correctly
