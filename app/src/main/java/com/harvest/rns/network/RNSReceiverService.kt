@@ -17,6 +17,7 @@ import com.harvest.rns.network.bluetooth.BluetoothRNodeManager
 import com.harvest.rns.network.lxmf.LxmfMessageParser
 import com.harvest.rns.network.rns.RnsAnnounceParser
 import com.harvest.rns.network.rns.RnsFrameDecoder
+import com.harvest.rns.network.rns.RnsIdentity
 import com.harvest.rns.ui.main.MainActivity
 import com.harvest.rns.utils.CsvParser
 import kotlinx.coroutines.*
@@ -68,6 +69,7 @@ class RNSReceiverService : Service() {
     // ─── Members ──────────────────────────────────────────────────────────────
     private lateinit var btManager: BluetoothRNodeManager
     private lateinit var repository: HarvestRepository
+    private lateinit var identity: RnsIdentity
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var frameProcessorJob: Job? = null
 
@@ -77,7 +79,8 @@ class RNSReceiverService : Service() {
         Log.i(TAG, "Service created")
         btManager  = BluetoothRNodeManager(applicationContext)
         repository = HarvestRepository(HarvestDatabase.getInstance(applicationContext).harvestDao())
-        generateOwnAddress()
+        identity   = RnsIdentity.loadOrCreate(applicationContext)
+        _ownAddress.value = identity.addressHex
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Waiting for RNode…"))
         observeBluetoothState()
@@ -119,45 +122,7 @@ class RNSReceiverService : Service() {
 
     // ─── Own address ──────────────────────────────────────────────────────────
 
-    /**
-     * Generate (or restore) a persistent RNS destination address for this receiver.
-     *
-     * RNS identity/destination addresses as displayed in Sideband, rnsh, and RNode
-     * tools are 32 hex characters (16 bytes). This is the full truncated hash of
-     * the identity public key: SHA-256(public_key)[0:16].
-     *
-     * Since we don't have a full Ed25519 keypair here, we derive the address from
-     * a stable random seed using the same 16-byte truncated SHA-256 approach, which
-     * produces an address in exactly the format RNS users expect to enter into their
-     * LXMF destination configuration.
-     *
-     * The address is generated once, persisted, and never changes across app restarts.
-     * Delete app data to regenerate.
-     */
-    private fun generateOwnAddress() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val stored = prefs.getString(PREF_IDENTITY, null)
-
-        // Migrate old 20-char address to 32-char format
-        if (stored != null && stored.length == 32) {
-            _ownAddress.value = stored
-            Log.i(TAG, "Own address (restored): $stored")
-            return
-        }
-
-        // Generate a new stable 32-char (16-byte) identity address
-        // Use two rounds of SHA-256 to mix entropy from UUID + app package
-        val seed   = UUID.randomUUID().toString() + packageName
-        val round1 = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray())
-        val round2 = MessageDigest.getInstance("SHA-256").digest(round1)
-
-        // Take first 16 bytes → 32 hex chars (matches RNS address display format)
-        val address = round2.take(16).joinToString("") { "%02x".format(it) }
-
-        prefs.edit().putString(PREF_IDENTITY, address).apply()
-        _ownAddress.value = address
-        Log.i(TAG, "Own address (new): $address")
-    }
+    // Identity is now managed by RnsIdentity class
 
     // ─── Frame pipeline ───────────────────────────────────────────────────────
 
@@ -239,20 +204,34 @@ class RNSReceiverService : Service() {
     private suspend fun processDataPacket(pkt: RnsFrameDecoder.RnsPacket) {
         Log.d(TAG, "processDataPacket: ${pkt.data.size}b payload")
 
-        // Strategy 1: try LXMF parse — harvester sent via Sideband/LXMF
+        // Strategy 1: try decrypting with our identity keypair (RNS encrypted message)
+        val decrypted = identity.decrypt(pkt.data)
+        if (decrypted != null) {
+            Log.i(TAG, "Decrypted ${pkt.data.size}b → ${decrypted.size}b")
+            // Try LXMF on decrypted content
+            val lxmf = LxmfMessageParser.parse(decrypted)
+            if (lxmf != null && lxmf.content.isNotBlank()) {
+                Log.i(TAG, "LXMF (decrypted) from ${lxmf.sourceHashHex}: ${lxmf.content.length} chars")
+                processCsvContent(lxmf.content)
+                return
+            }
+            // Try raw CSV on decrypted content
+            if (tryRawCsv(decrypted)) return
+        }
+
+        // Strategy 2: try LXMF parse on raw payload (unencrypted / plaintext LXMF)
         val lxmf = LxmfMessageParser.parse(pkt.data)
         if (lxmf != null && lxmf.content.isNotBlank()) {
-            Log.i(TAG, "LXMF message from ${lxmf.sourceHashHex}: '${lxmf.title}' (${lxmf.content.length} chars)")
+            Log.i(TAG, "LXMF (plain) from ${lxmf.sourceHashHex}: '${lxmf.title}' (${lxmf.content.length} chars)")
             processCsvContent(lxmf.content)
             return
         }
 
-        // Strategy 2: try raw CSV on the stripped RNS payload
-        Log.d(TAG, "LXMF parse failed or empty — trying raw CSV on ${pkt.data.size}b payload")
+        // Strategy 3: try raw CSV on payload directly
+        Log.d(TAG, "LXMF parse failed — trying raw CSV on ${pkt.data.size}b")
         if (tryRawCsv(pkt.data)) return
 
-        // Strategy 3: try the entire raw frame as CSV (sender bypassed RNS framing)
-        Log.d(TAG, "Payload CSV failed — no parseable data in this packet")
+        Log.d(TAG, "No parseable data in ${pkt.data.size}b packet — may need decryption key exchange")
     }
 
     /**
@@ -369,24 +348,14 @@ class RNSReceiverService : Service() {
     private fun sendSelfAnnounce() {
         serviceScope.launch {
             try {
-                val addr = _ownAddress.value
-                if (addr.length < 20) return@launch
+                val hashBytes = identity.truncatedHash  // 10-byte wire hash
 
-                // Convert hex address to bytes (use first 10 bytes for wire hash)
-                val hashBytes = ByteArray(10) { i ->
-                    addr.substring(i * 2, i * 2 + 2).toInt(16).toByte()
-                }
-
-                // Minimal announce payload:
-                // 32 bytes Ed25519 pub key placeholder + 32 bytes X25519 placeholder
-                // + app data "lxmf.delivery\u0000RNS Harvest Receiver"
+                // Build announce data with REAL Ed25519 + X25519 public keys
+                // This allows senders to encrypt messages to us correctly
                 val appData = "lxmf.delivery\u0000RNS Harvest Receiver".toByteArray(Charsets.UTF_8)
-                val keyPlaceholder = ByteArray(64) { 0x00 }
-                val nameHash = ByteArray(10) { 0x00 }
-                val randomBlob = ByteArray(10) { (it * 7).toByte() }
-                val sigPlaceholder = ByteArray(64) { 0x00 }
+                val announceData = identity.buildAnnounceData(appData)
+                val sigPlaceholder = ByteArray(64) { 0x00 }  // sig not verified by receiver
 
-                // Concatenate ByteArrays (Kotlin has no + for ByteArray)
                 fun concat(vararg arrays: ByteArray): ByteArray {
                     val total = arrays.sumOf { it.size }
                     val out = ByteArray(total)
@@ -395,21 +364,18 @@ class RNSReceiverService : Service() {
                     return out
                 }
 
-                val announceData = concat(keyPlaceholder, nameHash, randomBlob, appData, sigPlaceholder)
+                val fullAnnounceData = concat(announceData, sigPlaceholder)
 
-                // Build RNS packet bytes
-                val header0 = 0x01.toByte()  // ANNOUNCE, broadcast, single dest
+                // RNS ANNOUNCE header: type=ANNOUNCE(0x01)
+                val header0 = 0x01.toByte()
                 val header1 = 0x00.toByte()  // 0 hops
 
-                val packet = concat(byteArrayOf(header0, header1), hashBytes, announceData)
+                val packet = concat(byteArrayOf(header0, header1), hashBytes, fullAnnounceData)
 
-                // Wrap in CMD_INTERFACES KISS frame (0x25) — the RNode
-                // requires this format to actually transmit the packet over LoRa.
-                // Standard CMD_DATA (0x00) only works for direct serial comms.
                 val kissFrame = RnsFrameDecoder.KissFramer.encodeInterfaceFrame(packet)
                 btManager.sendRawFrame(kissFrame)
 
-                Log.i(TAG, "Self-announce sent via CMD_INTERFACES (${addr.take(8)}…)")
+                Log.i(TAG, "Self-announce sent with real keys: ${identity.addressHex.take(16)}…")
             } catch (e: Exception) {
                 Log.e(TAG, "Announce error: ${e.message}")
             }

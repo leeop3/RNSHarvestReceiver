@@ -105,6 +105,9 @@ dependencies {
     // Kotlin stdlib
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
 
+    // BouncyCastle for Ed25519/X25519 cryptography (RNS identity)
+    implementation 'org.bouncycastle:bcprov-jdk15to18:1.78.1'
+
     // Testing
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
