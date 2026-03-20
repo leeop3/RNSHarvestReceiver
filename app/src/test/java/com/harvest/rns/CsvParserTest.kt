@@ -14,13 +14,13 @@ class CsvParserTest {
         val record = CsvParser.parseLine(line)
 
         assertNotNull(record)
-        assertEquals("REC-001",  record!!.externalId)
-        assertEquals("HRV-01",   record.harvesterId)
-        assertEquals("BLK-A1",   record.blockId)
-        assertEquals(24,          record.ripeBunches)
-        assertEquals(3,           record.emptyBunches)
-        assertEquals(1.554320,    record.latitude,  0.00001)
-        assertEquals(110.345210,  record.longitude, 0.00001)
+        assertEquals("REC-001",   record!!.externalId)
+        assertEquals("HRV-01",    record.harvesterId)
+        assertEquals("BLK-A1",    record.blockId)
+        assertEquals(24,           record.ripeBunches)
+        assertEquals(3,            record.emptyBunches)
+        assertEquals(1.554320,     record.latitude,  0.00001)
+        assertEquals(110.345210,   record.longitude, 0.00001)
         assertEquals("2025-01-15T08:30:00", record.timestamp)
         assertEquals("2025-01-15", record.reportDate)
         assertEquals("photo_001.jpg", record.photoFile)
@@ -37,7 +37,8 @@ class CsvParserTest {
 
     @Test
     fun `return null for insufficient fields`() {
-        val line = "REC-003,HRV-01,BLK-A1,24,3"
+        // Fewer than 4 fields — too little data to create any meaningful record
+        val line = "HRV-01,BLK-A1,24"   // only 3 fields
         val record = CsvParser.parseLine(line)
         assertNull(record)
     }
@@ -46,6 +47,30 @@ class CsvParserTest {
     fun `return null for empty string`() {
         val record = CsvParser.parseLine("")
         assertNull(record)
+    }
+
+    @Test
+    fun `parse minimal 4-field CSV`() {
+        // Flexible parser accepts 4+ fields: harvester, block, ripe, empty
+        val line = "HRV-01,BLK-A1,24,3"
+        val record = CsvParser.parseLine(line)
+        assertNotNull(record)
+        assertEquals("HRV-01", record!!.harvesterId)
+        assertEquals("BLK-A1", record.blockId)
+        assertEquals(24,        record.ripeBunches)
+        assertEquals(3,         record.emptyBunches)
+    }
+
+    @Test
+    fun `parse 5-field CSV with id prefix`() {
+        val line = "REC-003,HRV-01,BLK-A1,24,3"
+        val record = CsvParser.parseLine(line)
+        // 5 fields treated as: id, harvester, block, ripe, empty
+        assertNotNull(record)
+        assertEquals("HRV-01", record!!.harvesterId)
+        assertEquals("BLK-A1", record.blockId)
+        assertEquals(24,        record.ripeBunches)
+        assertEquals(3,         record.emptyBunches)
     }
 
     @Test
