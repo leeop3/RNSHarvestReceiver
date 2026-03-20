@@ -55,12 +55,23 @@
                 app:strokeColor="@color/accent_green"
                 android:textColor="@color/accent_green" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/showQrBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:text="QR"
+                android:textSize="11sp"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                app:strokeColor="@color/accent_green"
+                android:textColor="@color/accent_green" />
+
         </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Key this address into field harvesters as their LXMF destination"
+            android:text="Tap QR to show scannable code for field harvesters"
             android:textColor="@color/text_hint"
             android:textSize="10sp"
             android:layout_marginTop="4dp" />

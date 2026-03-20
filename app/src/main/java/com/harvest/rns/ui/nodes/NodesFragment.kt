@@ -3,6 +3,8 @@ package com.harvest.rns.ui.nodes
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.widget.ImageView
+import com.harvest.rns.utils.QrCodeGenerator
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -51,6 +53,9 @@ class NodesFragment : Fragment() {
         }
         binding.copyAddressBtn.setOnClickListener {
             copyToClipboard(viewModel.ownAddress.value ?: "", "Receiver Address")
+        }
+        binding.showQrBtn.setOnClickListener {
+            showQrDialog(viewModel.ownAddress.value ?: "")
         }
 
         // ── Discovered nodes ──────────────────────────────────────────────────

@@ -36,23 +36,13 @@ class IncomingRecordsAdapter(private val viewModel: MainViewModel) :
         )
 
         fun bind(record: HarvestRecord, viewModel: MainViewModel) {
-            // Split raw CSV directly — field positions are fixed regardless of schema:
-            // [0]=id [1]=harvester_id [2]=block_id [3]=ripe [4]=empty
-            // [5]=lat [6]=lon [7]=timestamp [8]=photo
-            val f = record.rawCsv.split(",")
-
-            val harvesterId  = f.getOrElse(1) { record.harvesterId }.trim()
-            val blockId      = f.getOrElse(2) { record.blockId }.trim()
-            val ripe         = f.getOrElse(3) { "0" }.trim().toIntOrNull() ?: 0
-            val empty        = f.getOrElse(4) { "0" }.trim().toIntOrNull() ?: 0
-            val timestamp    = f.getOrElse(7) { record.timestamp }.trim()
-
-            // Use nickname if set, otherwise raw harvester_id from CSV
-            val nick = viewModel.getNickname(harvesterId)
-            b.harvesterIdText.text  = nick ?: harvesterId
-            b.blockIdText.text      = blockId
-            b.totalBunchesText.text = (ripe + empty).toString()
-            b.timestampText.text    = formatTime(timestamp)
+            // Use the already-parsed HarvestRecord fields directly —
+            // these are always correct regardless of CSV field count (5 or 9 fields)
+            val nick = viewModel.getNickname(record.harvesterId)
+            b.harvesterIdText.text  = nick ?: record.harvesterId
+            b.blockIdText.text      = record.blockId
+            b.totalBunchesText.text = (record.ripeBunches + record.emptyBunches).toString()
+            b.timestampText.text    = formatTime(record.timestamp)
         }
 
         private fun formatTime(ts: String): String {
