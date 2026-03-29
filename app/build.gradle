@@ -2,8 +2,9 @@ plugins {
     id 'com.android.application'
     id 'kotlin-android'
     id 'kotlin-kapt'
-    id 'com.chaquo.python'
 }
+
+apply plugin: "com.chaquo.python"
 
 android {
     namespace 'com.harvest.rns'
