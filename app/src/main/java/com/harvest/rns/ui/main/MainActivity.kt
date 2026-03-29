@@ -23,7 +23,6 @@ import com.harvest.rns.R
 import com.harvest.rns.data.model.ConnectionStatus
 import com.harvest.rns.databinding.ActivityMainBinding
 import com.harvest.rns.network.RNSReceiverService
-import com.harvest.rns.network.bluetooth.BluetoothRNodeManager
 import com.harvest.rns.ui.settings.RadioSettingsDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -122,14 +121,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun observeServiceState() {
         CoroutineScope(Dispatchers.Main).launch {
-            rnsService?.getBluetoothState()?.collect { state ->
-                viewModel.updateConnectionStatus(when (state) {
-                    is BluetoothRNodeManager.BtState.Connected    -> ConnectionStatus.Connected(state.device.name ?: "RNode", state.device.address)
-                    is BluetoothRNodeManager.BtState.Connecting   -> ConnectionStatus.Connecting(state.device.name ?: "RNode")
-                    is BluetoothRNodeManager.BtState.Reconnecting -> ConnectionStatus.Connecting("RNode (reconnecting)")
-                    is BluetoothRNodeManager.BtState.Error        -> ConnectionStatus.Error(state.message)
-                    else -> ConnectionStatus.Disconnected
-                })
+            RNSReceiverService.serviceStatus.collect { status ->
+                val cs = when {
+                    status.startsWith("Connected")    -> {
+                        val name = status.removePrefix("Connected — ").trim()
+                        ConnectionStatus.Connected(name, "")
+                    }
+                    status.startsWith("Connecting")   -> ConnectionStatus.Connecting(status)
+                    status.startsWith("Ready")        -> ConnectionStatus.Disconnected
+                    status.startsWith("Stopped")      -> ConnectionStatus.Disconnected
+                    status.startsWith("Disconnected") -> ConnectionStatus.Disconnected
+                    else                              -> ConnectionStatus.Error(status)
+                }
+                viewModel.updateConnectionStatus(cs)
             }
         }
     }

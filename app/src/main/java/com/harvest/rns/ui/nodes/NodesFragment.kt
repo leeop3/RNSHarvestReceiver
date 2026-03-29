@@ -139,16 +139,21 @@ class NodesFragment : Fragment() {
             Toast.makeText(requireContext(), "Address not ready yet", Toast.LENGTH_SHORT).show()
             return
         }
-        val dialogView = layoutInflater.inflate(R.layout.dialog_qr_code, null)
-        val qrImage    = dialogView.findViewById<android.widget.ImageView>(R.id.qrImage)
-        val addrText   = dialogView.findViewById<android.widget.TextView>(R.id.qrAddressText)
-        val bitmap     = com.harvest.rns.utils.QrCodeGenerator.generate(address, 600)
-        qrImage.setImageBitmap(bitmap)
-        addrText.text  = address.chunked(8).joinToString(" ")
-        AlertDialog.Builder(requireContext())
-            .setView(dialogView)
-            .setPositiveButton("Close", null)
-            .show()
+        try {
+            val dialogView = layoutInflater.inflate(R.layout.dialog_qr_code, null)
+            val qrImage    = dialogView.findViewById<android.widget.ImageView>(R.id.qrImage)
+            val addrText   = dialogView.findViewById<android.widget.TextView>(R.id.qrAddressText)
+            val bitmap     = com.harvest.rns.utils.QrCodeGenerator.generate(address, 600)
+            qrImage.setImageBitmap(bitmap)
+            addrText.text  = address.chunked(8).joinToString(" ")
+            AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .setPositiveButton("Close", null)
+                .show()
+        } catch (e: Exception) {
+            android.util.Log.e("NodesFragment", "QR generation failed: ${e.message}", e)
+            Toast.makeText(requireContext(), "QR error: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onDestroyView() { super.onDestroyView(); _binding = null }

@@ -2,6 +2,7 @@ plugins {
     id 'com.android.application'
     id 'kotlin-android'
     id 'kotlin-kapt'
+    id 'com.chaquo.python'
 }
 
 android {
@@ -20,6 +21,16 @@ android {
         javaCompileOptions {
             annotationProcessorOptions {
                 arguments += ["room.incremental": "true"]
+            }
+        }
+
+        python {
+            // Python 3.11 — matches RNS/LXMF requirements
+            version "3.11"
+            pip {
+                install "rns"
+                install "lxmf"
+                install "pyserial"
             }
         }
     }
@@ -105,8 +116,6 @@ dependencies {
     // Kotlin stdlib
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
 
-    // BouncyCastle for Ed25519/X25519 cryptography (RNS identity)
-    implementation 'org.bouncycastle:bcprov-jdk15to18:1.78.1'
     // ZXing for QR code generation
     implementation 'com.google.zxing:core:3.5.3'
 
