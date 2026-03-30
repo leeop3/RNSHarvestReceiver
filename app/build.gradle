@@ -1,7 +1,7 @@
 plugins {
     id 'com.android.application'
-    id 'kotlin-android'
-    id 'kotlin-kapt'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.kapt'
     id 'com.chaquo.python' version '15.0.1'
 }
 
@@ -118,7 +118,6 @@ dependencies {
     implementation 'com.opencsv:opencsv:5.8'
 
     // Kotlin stdlib
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
 
     // ZXing for QR code generation
     implementation 'com.google.zxing:core:3.5.3'
