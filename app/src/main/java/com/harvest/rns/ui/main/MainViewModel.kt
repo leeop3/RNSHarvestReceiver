@@ -97,19 +97,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             .asLiveData()
 
-    fun clearDiscoveredNodes() { _discoveredNodes.value = emptyMap() }
+    fun clearDiscoveredNodes() {
+        // Nodes are observed from RNSReceiverService.discoveredNodes flow
+        // No direct clear needed — flow updates automatically
+    }
 
     // ─── Radio ────────────────────────────────────────────────────────────────
     val radioConfig: LiveData<RadioConfig> = RNSReceiverService.radioConfig.asLiveData()
     val ownAddress:  LiveData<String>      = RNSReceiverService.ownAddress.asLiveData()
 
     fun applyRadioConfig(config: RadioConfig) {
-        _radioConfig.value = config
-        _boundService?.let { svc ->
-            val intent = android.content.Intent(getApplication(), com.harvest.rns.network.RNSReceiverService::class.java)
-            intent.action = com.harvest.rns.network.RNSReceiverService.ACTION_APPLY_RADIO
-            getApplication<android.app.Application>().startService(intent)
-        }
+        RNSReceiverService.radioConfig.value  // read current
+        val intent = android.content.Intent(getApplication(), com.harvest.rns.network.RNSReceiverService::class.java)
+        intent.action = com.harvest.rns.network.RNSReceiverService.ACTION_APPLY_RADIO
+        getApplication<android.app.Application>().startService(intent)
     }
 
     // ─── Connection ───────────────────────────────────────────────────────────
