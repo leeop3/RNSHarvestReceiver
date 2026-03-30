@@ -97,13 +97,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             .asLiveData()
 
-    fun clearDiscoveredNodes() { _boundService?.clearDiscoveredNodes() }
+    fun clearDiscoveredNodes() { _discoveredNodes.value = emptyMap() }
 
     // ─── Radio ────────────────────────────────────────────────────────────────
     val radioConfig: LiveData<RadioConfig> = RNSReceiverService.radioConfig.asLiveData()
     val ownAddress:  LiveData<String>      = RNSReceiverService.ownAddress.asLiveData()
 
-    fun applyRadioConfig(config: RadioConfig) { _boundService?.applyRadioConfig(config) }
+    fun applyRadioConfig(config: RadioConfig) {
+        _radioConfig.value = config
+        _boundService?.let { svc ->
+            val intent = android.content.Intent(getApplication(), com.harvest.rns.network.RNSReceiverService::class.java)
+            intent.action = com.harvest.rns.network.RNSReceiverService.ACTION_APPLY_RADIO
+            getApplication<android.app.Application>().startService(intent)
+        }
+    }
 
     // ─── Connection ───────────────────────────────────────────────────────────
     private val _connectionStatus = MutableLiveData<ConnectionStatus>(ConnectionStatus.Disconnected)
@@ -125,7 +132,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 prefs.getInt(RadioConfig.PREF_CR, RadioConfig.DEFAULT.codingRate),
                 prefs.getInt(RadioConfig.PREF_TXPOWER, RadioConfig.DEFAULT.txPower)
             )
-            s.applyRadioConfig(config)
+            applyRadioConfig(config)
         }
     }
     fun unbindService() { _boundService = null }

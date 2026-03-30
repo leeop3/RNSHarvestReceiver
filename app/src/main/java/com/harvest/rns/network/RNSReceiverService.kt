@@ -223,14 +223,20 @@ class RNSReceiverService : Service() {
         }
         var saved = 0; var dupes = 0
         for (record in records) {
-            if (repository.isDuplicate(record.externalId, record.harvesterId, record.timestamp)) {
-                dupes++
-            } else {
-                repository.insert(record)
-                saved++
-                _messageCount.value++
-                _lastMessageTime.value = System.currentTimeMillis()
-                Log.i(TAG, "Saved: ${record.harvesterId}/${record.blockId} total=${record.ripeBunches + record.emptyBunches}")
+            when (repository.insertRecord(record)) {
+                is HarvestRepository.InsertResult.Success -> {
+                    saved++
+                    _messageCount.value++
+                    _lastMessageTime.value = System.currentTimeMillis()
+                    Log.i(TAG, "Saved: ${record.harvesterId}/${record.blockId} total=${record.ripeBunches + record.emptyBunches}")
+                }
+                is HarvestRepository.InsertResult.Duplicate -> {
+                    dupes++
+                    Log.d(TAG, "Duplicate: ${record.harvesterId}/${record.blockId}")
+                }
+                is HarvestRepository.InsertResult.Error -> {
+                    Log.e(TAG, "Insert error for ${record.harvesterId}")
+                }
             }
         }
         _duplicateCount.value += dupes

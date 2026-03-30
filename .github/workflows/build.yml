@@ -99,7 +99,13 @@ jobs:
           git config user.name "CI"
           git rm --cached --ignore-unmatch \
             app/src/main/java/com/harvest/rns/ui/radio/RadioConfigFragment.kt \
-            app/src/main/res/layout/fragment_radio_config.xml || true
+            app/src/main/res/layout/fragment_radio_config.xml \
+            app/src/main/java/com/harvest/rns/network/rns/RnsIdentity.kt \
+            app/src/main/java/com/harvest/rns/network/rns/RnsFrameDecoder.kt \
+            app/src/main/java/com/harvest/rns/network/rns/RnsAnnounceParser.kt \
+            app/src/main/java/com/harvest/rns/network/lxmf/LxmfMessageParser.kt \
+            app/src/main/java/com/harvest/rns/network/bluetooth/BluetoothRNodeManager.kt \
+            "app/src/main/java/com/palm/harvest/ui/MainUIComponents.kt" || true
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
